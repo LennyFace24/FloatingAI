@@ -65,9 +65,10 @@ fn save_settings(
 async fn start_chat(
     app: tauri::AppHandle,
     runtime: tauri::State<'_, Arc<ai::ChatRuntime>>,
+    request_id: String,
     messages: Vec<ai::ProviderMessage>,
-) -> Result<String, String> {
-    ai::start_chat(app, runtime.inner().clone(), messages).await
+) -> Result<(), String> {
+    ai::start_chat(app, runtime.inner().clone(), request_id, messages).await
 }
 
 #[tauri::command]

@@ -14,7 +14,7 @@ export interface ChatErrorPayload {
   message: string;
 }
 
-export type SurfaceChangedPayload = 'floating' | 'chat';
+export type SurfaceChangedPayload = 'floating' | 'chat' | 'settings';
 
 export const events = {
   onChatDelta: (handler: (payload: ChatDeltaPayload) => void): Promise<UnlistenFn> =>

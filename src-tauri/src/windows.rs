@@ -1,29 +1,13 @@
-use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::settings;
 
 pub const FLOATING_LABEL: &str = "floating";
-pub const SETTINGS_LABEL: &str = "settings";
 
 const FLOATING_SIZE: f64 = 50.0;
 const CHAT_WIDTH: f64 = 480.0;
 const CHAT_HEIGHT: f64 = 620.0;
 
-fn ensure_settings_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
-    if let Some(window) = app.get_webview_window(SETTINGS_LABEL) {
-        return Ok(window);
-    }
-
-    WebviewWindowBuilder::new(app, SETTINGS_LABEL, WebviewUrl::App("index.html".into()))
-        .title("Floating AI 设置")
-        .inner_size(460.0, 560.0)
-        .resizable(false)
-        .decorations(false)
-        .always_on_top(true)
-        .skip_taskbar(true)
-        .visible(false)
-        .build()
-}
 
 fn expanded_position(app: &AppHandle) -> Option<tauri::PhysicalPosition<i32>> {
     let window = app.get_webview_window(FLOATING_LABEL)?;
@@ -63,9 +47,6 @@ pub fn show_chat_panel(app: &AppHandle) -> tauri::Result<()> {
 }
 
 pub fn show_floating_ball(app: &AppHandle) -> tauri::Result<()> {
-    if let Some(settings_window) = app.get_webview_window(SETTINGS_LABEL) {
-        settings_window.hide()?;
-    }
     let Some(window) = app.get_webview_window(FLOATING_LABEL) else {
         return Err(tauri::Error::WindowNotFound);
     };
@@ -86,18 +67,23 @@ pub fn show_floating_ball(app: &AppHandle) -> tauri::Result<()> {
 }
 
 pub fn show_settings_panel(app: &AppHandle) -> tauri::Result<()> {
-    let settings_window = ensure_settings_window(app)?;
-    settings_window.center()?;
-    settings_window.show()?;
-    settings_window.set_focus()?;
+    let Some(window) = app.get_webview_window(FLOATING_LABEL) else {
+        return Err(tauri::Error::WindowNotFound);
+    };
+    window.set_size(tauri::Size::Logical(tauri::LogicalSize {
+        width: 460.0,
+        height: 560.0,
+    }))?;
+    window.set_resizable(false)?;
+    window.emit("surface://changed", "settings")?;
+    window.show()?;
+    window.set_focus()?;
     Ok(())
 }
 
 pub fn hide_all_windows(app: &AppHandle) -> tauri::Result<()> {
-    for label in [FLOATING_LABEL, SETTINGS_LABEL] {
-        if let Some(window) = app.get_webview_window(label) {
-            window.hide()?;
-        }
+    if let Some(window) = app.get_webview_window(FLOATING_LABEL) {
+        window.hide()?;
     }
     Ok(())
 }

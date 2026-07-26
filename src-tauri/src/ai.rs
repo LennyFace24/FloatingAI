@@ -5,7 +5,6 @@ use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{oneshot, Mutex};
-use uuid::Uuid;
 
 use crate::settings;
 
@@ -54,8 +53,9 @@ pub fn chat_completions_url(base_url: &str) -> String {
 pub async fn start_chat(
     app: AppHandle,
     runtime: Arc<ChatRuntime>,
+    request_id: String,
     messages: Vec<ProviderMessage>,
-) -> Result<String, String> {
+) -> Result<(), String> {
     let stored = settings::load_settings(&app)?;
     let api_key = stored
         .api_key
@@ -63,7 +63,6 @@ pub async fn start_chat(
         .filter(|key| !key.is_empty())
         .ok_or_else(|| "请先在设置中配置 API Key".to_string())?;
 
-    let request_id = Uuid::new_v4().to_string();
     let (cancel_tx, cancel_rx) = oneshot::channel::<()>();
     runtime
         .cancellations
@@ -110,7 +109,7 @@ pub async fn start_chat(
         }
     });
 
-    Ok(request_id)
+    Ok(())
 }
 
 pub async fn stop_chat(runtime: Arc<ChatRuntime>, request_id: String) -> Result<(), String> {

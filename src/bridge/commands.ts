@@ -30,6 +30,7 @@ export const commands = {
   hideAllWindows: () => invoke<void>('hide_all_windows'),
   getSettings: () => invoke<AppSettings>('get_settings'),
   saveSettings: (settings: SaveSettingsInput) => invoke<AppSettings>('save_settings', { settings }),
-  startChat: (messages: ChatMessageInput[]) => invoke<string>('start_chat', { messages }),
+  startChat: (requestId: string, messages: ChatMessageInput[]) =>
+    invoke<void>('start_chat', { requestId, messages }),
   stopChat: (requestId: string) => invoke<void>('stop_chat', { requestId }),
 };

@@ -1,6 +1,5 @@
 import { useEffect, useReducer, useState } from 'react';
-import { getCurrentWindow } from '@tauri-apps/api/window';
-import { commands } from './bridge/commands';
+import { commands, type AppSettings } from './bridge/commands';
 import { events } from './bridge/events';
 import { ChatPanel } from './chat/ChatPanel';
 import {
@@ -13,10 +12,22 @@ import { defaultSettingsForm, type SettingsFormInput } from './settings/settings
 import { SettingsPanel } from './settings/SettingsPanel';
 import './styles/app.css';
 
-type MainSurface = 'floating' | 'chat';
+type MainSurface = 'floating' | 'chat' | 'settings';
 
-function MainWindow() {
+function settingsFormFromPublic(settings: AppSettings) {
+  return {
+    apiKey: '',
+    baseUrl: settings.baseUrl,
+    model: settings.model,
+    globalShortcut: settings.globalShortcut,
+    autostartEnabled: settings.autostartEnabled,
+    floatingAlwaysOnTop: settings.floatingAlwaysOnTop,
+  } satisfies SettingsFormInput;
+}
+
+export default function App() {
   const [surface, setSurface] = useState<MainSurface>('floating');
+  const [settingsForm, setSettingsForm] = useState<SettingsFormInput>(defaultSettingsForm);
   const [conversation, dispatch] = useReducer(conversationReducer, initialConversationState);
 
   useEffect(() => {
@@ -34,17 +45,53 @@ function MainWindow() {
   }, []);
 
   async function sendMessage(content: string) {
-    const requestId = await commands.startChat([
+    const requestId = crypto.randomUUID();
+    const providerMessages = [
       ...buildProviderMessages(conversation.messages),
-      { role: 'user', content },
-    ]);
+      { role: 'user' as const, content },
+    ];
+
     dispatch({ type: 'send', requestId, content });
+    try {
+      await commands.startChat(requestId, providerMessages);
+    } catch (error) {
+      dispatch({
+        type: 'error',
+        requestId,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
     return requestId;
   }
 
   async function stopMessage(requestId: string) {
     await commands.stopChat(requestId);
     dispatch({ type: 'stopped', requestId });
+  }
+
+  async function openSettings() {
+    const settings = await commands.getSettings().catch(() => null);
+    setSettingsForm(settings ? settingsFormFromPublic(settings) : defaultSettingsForm);
+    await commands.showSettingsPanel();
+    setSurface('settings');
+  }
+
+  async function returnToChat() {
+    await commands.showChatPanel();
+    setSurface('chat');
+  }
+
+  if (surface === 'settings') {
+    return (
+      <SettingsPanel
+        initialSettings={settingsForm}
+        onSave={async (settings) => {
+          await commands.saveSettings(settings);
+          await returnToChat();
+        }}
+        onClose={returnToChat}
+      />
+    );
   }
 
   if (surface === 'chat') {
@@ -63,7 +110,9 @@ function MainWindow() {
             .then(() => setSurface('floating'))
             .catch((error) => console.error('收起对话面板失败', error));
         }}
-        onOpenSettings={() => void commands.showSettingsPanel()}
+        onOpenSettings={() => {
+          void openSettings().catch((error) => console.error('打开设置失败', error));
+        }}
       />
     );
   }
@@ -79,41 +128,4 @@ function MainWindow() {
       }}
     />
   );
-}
-
-function SettingsWindow() {
-  const [initialSettings, setInitialSettings] = useState<SettingsFormInput | null>(null);
-
-  useEffect(() => {
-    commands
-      .getSettings()
-      .then((settings) =>
-        setInitialSettings({
-          apiKey: '',
-          baseUrl: settings.baseUrl,
-          model: settings.model,
-          globalShortcut: settings.globalShortcut,
-          autostartEnabled: settings.autostartEnabled,
-          floatingAlwaysOnTop: settings.floatingAlwaysOnTop,
-        }),
-      )
-      .catch(() => setInitialSettings(defaultSettingsForm));
-  }, []);
-
-  if (!initialSettings) return <p>加载设置...</p>;
-
-  return (
-    <SettingsPanel
-      initialSettings={initialSettings}
-      onSave={async (settings) => {
-        await commands.saveSettings(settings);
-        await commands.showFloatingBall();
-      }}
-      onClose={() => void commands.showFloatingBall()}
-    />
-  );
-}
-
-export default function App() {
-  return getCurrentWindow().label === 'settings' ? <SettingsWindow /> : <MainWindow />;
 }
