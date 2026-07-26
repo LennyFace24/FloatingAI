@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import type { ChatMessage, ConversationStatus } from './conversation';
+import { RichMessage } from './RichMessage';
 
 interface ChatPanelProps {
   messages: ChatMessage[];
@@ -66,7 +67,11 @@ export function ChatPanel({
       <div className="message-list" aria-live="polite" ref={listRef}>
         {messages.map((message) => (
           <article className={`message message-${message.role}`} key={message.id}>
-            <p>{message.content || (message.role === 'assistant' ? '正在生成...' : '')}</p>
+            {message.role === 'assistant' ? (
+              message.content ? <RichMessage content={message.content} /> : <p>正在生成...</p>
+            ) : (
+              <p>{message.content}</p>
+            )}
             {message.role === 'assistant' && message.content ? (
               <button type="button" onClick={() => void navigator.clipboard.writeText(message.content)}>
                 复制
