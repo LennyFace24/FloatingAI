@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the floating, chat, and settings windows",
+  "windows": [
+    "floating",
+    "chat",
+    "settings"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "opener:default",
+    "store:default"
+  ]
+}

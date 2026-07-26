@@ -1,0 +1,161 @@
+use serde::{Deserialize, Serialize};
+use tauri_plugin_store::StoreExt;
+
+const SETTINGS_FILE: &str = "settings.json";
+const SETTINGS_KEY: &str = "appSettings";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WindowPosition {
+    pub x: i32,
+    pub y: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct StoredSettings {
+    pub api_key: Option<String>,
+    pub base_url: String,
+    pub model: String,
+    pub global_shortcut: String,
+    pub autostart_enabled: bool,
+    pub floating_always_on_top: bool,
+    pub floating_position: Option<WindowPosition>,
+}
+
+impl Default for StoredSettings {
+    fn default() -> Self {
+        Self {
+            api_key: None,
+            base_url: "https://api.openai.com/v1".to_string(),
+            model: "gpt-4o-mini".to_string(),
+            global_shortcut: "Alt+Space".to_string(),
+            autostart_enabled: false,
+            floating_always_on_top: true,
+            floating_position: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppSettings {
+    pub api_key_configured: bool,
+    pub base_url: String,
+    pub model: String,
+    pub global_shortcut: String,
+    pub autostart_enabled: bool,
+    pub floating_always_on_top: bool,
+}
+
+impl From<StoredSettings> for AppSettings {
+    fn from(value: StoredSettings) -> Self {
+        Self {
+            api_key_configured: value.api_key.as_ref().is_some_and(|key| !key.is_empty()),
+            base_url: value.base_url,
+            model: value.model,
+            global_shortcut: value.global_shortcut,
+            autostart_enabled: value.autostart_enabled,
+            floating_always_on_top: value.floating_always_on_top,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveSettingsInput {
+    pub api_key: Option<String>,
+    pub base_url: String,
+    pub model: String,
+    pub global_shortcut: String,
+    pub autostart_enabled: bool,
+    pub floating_always_on_top: bool,
+}
+
+impl SaveSettingsInput {
+    pub fn into_stored(self, previous: StoredSettings) -> StoredSettings {
+        let api_key = self
+            .api_key
+            .map(|key| key.trim().to_string())
+            .filter(|key| !key.is_empty())
+            .or(previous.api_key);
+
+        StoredSettings {
+            api_key,
+            base_url: self.base_url.trim().trim_end_matches('/').to_string(),
+            model: self.model.trim().to_string(),
+            global_shortcut: self.global_shortcut.trim().to_string(),
+            autostart_enabled: self.autostart_enabled,
+            floating_always_on_top: self.floating_always_on_top,
+            floating_position: previous.floating_position,
+        }
+    }
+}
+
+pub fn load_settings(app: &tauri::AppHandle) -> Result<StoredSettings, String> {
+    let store = app.store(SETTINGS_FILE).map_err(|error| error.to_string())?;
+    let settings = store
+        .get(SETTINGS_KEY)
+        .and_then(|value| serde_json::from_value::<StoredSettings>(value.clone()).ok())
+        .unwrap_or_default();
+    Ok(settings)
+}
+
+pub fn save_settings(app: &tauri::AppHandle, settings: &StoredSettings) -> Result<(), String> {
+    let store = app.store(SETTINGS_FILE).map_err(|error| error.to_string())?;
+    store.set(
+        SETTINGS_KEY,
+        serde_json::to_value(settings).map_err(|error| error.to_string())?,
+    );
+    store.save().map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_settings_are_valid() {
+        let settings = StoredSettings::default();
+        assert_eq!(settings.base_url, "https://api.openai.com/v1");
+        assert_eq!(settings.model, "gpt-4o-mini");
+        assert_eq!(settings.global_shortcut, "Alt+Space");
+        assert!(settings.floating_always_on_top);
+        assert!(settings.floating_position.is_none());
+    }
+
+    #[test]
+    fn public_settings_never_expose_api_key() {
+        let stored = StoredSettings {
+            api_key: Some("sk-secret".to_string()),
+            ..StoredSettings::default()
+        };
+        let json = serde_json::to_value(AppSettings::from(stored)).unwrap();
+        assert_eq!(json["apiKeyConfigured"], true);
+        assert!(json.get("apiKey").is_none());
+        assert!(!json.to_string().contains("sk-secret"));
+    }
+
+    #[test]
+    fn save_input_keeps_previous_key_when_blank() {
+        let previous = StoredSettings {
+            api_key: Some("sk-old".to_string()),
+            ..StoredSettings::default()
+        };
+        let input = SaveSettingsInput {
+            api_key: Some("   ".to_string()),
+            base_url: "https://api.example.com/v1/".to_string(),
+            model: " gpt-test ".to_string(),
+            global_shortcut: " Alt+Space ".to_string(),
+            autostart_enabled: true,
+            floating_always_on_top: false,
+        };
+
+        let stored = input.into_stored(previous);
+        assert_eq!(stored.api_key.as_deref(), Some("sk-old"));
+        assert_eq!(stored.base_url, "https://api.example.com/v1");
+        assert_eq!(stored.model, "gpt-test");
+        assert!(stored.autostart_enabled);
+        assert!(!stored.floating_always_on_top);
+    }
+}

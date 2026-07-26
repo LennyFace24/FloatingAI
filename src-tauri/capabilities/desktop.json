@@ -1,0 +1,17 @@
+{
+  "identifier": "desktop-capability",
+  "platforms": [
+    "macOS",
+    "windows",
+    "linux"
+  ],
+  "windows": [
+    "floating",
+    "chat",
+    "settings"
+  ],
+  "permissions": [
+    "global-shortcut:default",
+    "autostart:default"
+  ]
+}
