@@ -7,6 +7,7 @@ import {
   conversationReducer,
   initialConversationState,
 } from './chat/conversation';
+import { prefersReducedMotion } from './app/motion';
 import { FloatingBall } from './floating/FloatingBall';
 import { defaultSettingsForm, type SettingsFormInput } from './settings/settings';
 import { SettingsPanel } from './settings/SettingsPanel';
@@ -77,7 +78,7 @@ export default function App() {
   }
 
   async function returnToChat() {
-    await commands.showChatPanel();
+    await commands.showChatPanel(prefersReducedMotion());
     setSurface('chat');
   }
 
@@ -106,7 +107,7 @@ export default function App() {
         onClear={() => dispatch({ type: 'clear' })}
         onCollapse={() => {
           void commands
-            .showFloatingBall()
+            .showFloatingBall(prefersReducedMotion())
             .then(() => setSurface('floating'))
             .catch((error) => console.error('收起对话面板失败', error));
         }}
@@ -122,7 +123,7 @@ export default function App() {
       isBusy={conversation.status === 'streaming'}
       onActivate={() => {
         void commands
-          .showChatPanel()
+          .showChatPanel(prefersReducedMotion())
           .then(() => setSurface('chat'))
           .catch((error) => console.error('打开对话面板失败', error));
       }}

@@ -7,16 +7,20 @@ mod tray;
 mod windows;
 
 #[tauri::command]
-fn show_chat_panel(app: tauri::AppHandle) -> Result<(), String> {
-    windows::show_chat_panel(&app).map_err(|error| {
-        eprintln!("[floating-ai] show_chat_panel failed: {error}");
-        error.to_string()
-    })
+async fn show_chat_panel(app: tauri::AppHandle, reduced_motion: bool) -> Result<(), String> {
+    windows::show_chat_panel(&app, reduced_motion)
+        .await
+        .map_err(|error| {
+            eprintln!("[floating-ai] show_chat_panel failed: {error}");
+            error.to_string()
+        })
 }
 
 #[tauri::command]
-fn show_floating_ball(app: tauri::AppHandle) -> Result<(), String> {
-    windows::show_floating_ball(&app).map_err(|error| error.to_string())
+async fn show_floating_ball(app: tauri::AppHandle, reduced_motion: bool) -> Result<(), String> {
+    windows::show_floating_ball(&app, reduced_motion)
+        .await
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]

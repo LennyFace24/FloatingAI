@@ -20,7 +20,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "show" => {
-                let _ = windows::show_floating_ball(app);
+                windows::request_show_floating_ball(app);
             }
             "settings" => {
                 let _ = windows::show_settings_panel(app);
@@ -38,7 +38,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                 ..
             } = event
             {
-                let _ = windows::show_chat_panel(tray.app_handle());
+                windows::request_show_chat_panel(tray.app_handle());
             }
         })
         .build(app)?;

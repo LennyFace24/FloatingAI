@@ -8,7 +8,7 @@ pub fn register_global_shortcut(app: &AppHandle, shortcut_text: &str) -> Result<
     app.global_shortcut()
         .on_shortcut(shortcut, move |app_handle, _shortcut, event| {
             if event.state == ShortcutState::Pressed {
-                let _ = windows::toggle_chat_panel(app_handle);
+                windows::request_toggle_chat_panel(app_handle);
             }
         })
         .map_err(|error| format!("快捷键注册失败：{error}"))?;

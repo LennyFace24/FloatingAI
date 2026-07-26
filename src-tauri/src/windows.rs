@@ -1,4 +1,7 @@
-use tauri::{AppHandle, Emitter, Manager};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant};
+
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewWindow};
 
 use crate::settings;
 
@@ -7,59 +10,140 @@ pub const FLOATING_LABEL: &str = "floating";
 const FLOATING_SIZE: f64 = 50.0;
 const CHAT_WIDTH: f64 = 480.0;
 const CHAT_HEIGHT: f64 = 620.0;
+const SETTINGS_WIDTH: f64 = 460.0;
+const SETTINGS_HEIGHT: f64 = 560.0;
+const EXPAND_DURATION: Duration = Duration::from_millis(280);
+const COLLAPSE_DURATION: Duration = Duration::from_millis(180);
+const FRAME_DURATION: Duration = Duration::from_millis(16);
 
+static ANIMATION_GENERATION: AtomicU64 = AtomicU64::new(0);
 
-fn expanded_position(app: &AppHandle) -> Option<tauri::PhysicalPosition<i32>> {
-    let window = app.get_webview_window(FLOATING_LABEL)?;
-    let current = window.outer_position().ok()?;
-    let monitor = window.current_monitor().ok().flatten()?;
-    let monitor_pos = monitor.position();
-    let monitor_size = monitor.size();
-    let scale = monitor.scale_factor();
-    let width = (CHAT_WIDTH * scale) as i32;
-    let height = (CHAT_HEIGHT * scale) as i32;
-
-    let right_edge = monitor_pos.x + monitor_size.width as i32;
-    let bottom_edge = monitor_pos.y + monitor_size.height as i32;
-    let x = current.x.min(right_edge - width).max(monitor_pos.x);
-    let y = current.y.min(bottom_edge - height).max(monitor_pos.y);
-
-    Some(tauri::PhysicalPosition { x, y })
+#[derive(Clone, Copy)]
+struct WindowBounds {
+    position: PhysicalPosition<i32>,
+    size: PhysicalSize<u32>,
 }
 
-pub fn show_chat_panel(app: &AppHandle) -> tauri::Result<()> {
+fn current_bounds(window: &WebviewWindow) -> tauri::Result<WindowBounds> {
+    Ok(WindowBounds {
+        position: window.outer_position()?,
+        size: window.outer_size()?,
+    })
+}
+
+fn expanded_bounds(window: &WebviewWindow) -> tauri::Result<WindowBounds> {
+    let current = current_bounds(window)?;
+    let Some(monitor) = window.current_monitor()? else {
+        return Ok(WindowBounds {
+            position: current.position,
+            size: PhysicalSize::new(CHAT_WIDTH as u32, CHAT_HEIGHT as u32),
+        });
+    };
+    let scale = monitor.scale_factor();
+    let size = PhysicalSize::new((CHAT_WIDTH * scale) as u32, (CHAT_HEIGHT * scale) as u32);
+    let monitor_position = monitor.position();
+    let monitor_size = monitor.size();
+    let right = monitor_position.x + monitor_size.width as i32;
+    let bottom = monitor_position.y + monitor_size.height as i32;
+    let position = PhysicalPosition::new(
+        current
+            .position
+            .x
+            .min(right - size.width as i32)
+            .max(monitor_position.x),
+        current
+            .position
+            .y
+            .min(bottom - size.height as i32)
+            .max(monitor_position.y),
+    );
+    Ok(WindowBounds { position, size })
+}
+
+fn logical_size(window: &WebviewWindow, width: f64, height: f64) -> tauri::Result<PhysicalSize<u32>> {
+    let scale = window.scale_factor()?;
+    Ok(PhysicalSize::new((width * scale) as u32, (height * scale) as u32))
+}
+
+fn interpolate_i32(start: i32, end: i32, progress: f64) -> i32 {
+    start + ((end - start) as f64 * progress).round() as i32
+}
+
+fn interpolate_u32(start: u32, end: u32, progress: f64) -> u32 {
+    (start as f64 + (end as f64 - start as f64) * progress).round() as u32
+}
+
+fn ease_out_cubic(progress: f64) -> f64 {
+    1.0 - (1.0 - progress).powi(3)
+}
+
+async fn animate_window_bounds(
+    window: &WebviewWindow,
+    target: WindowBounds,
+    duration: Duration,
+    reduced_motion: bool,
+) -> tauri::Result<()> {
+    let generation = ANIMATION_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
+    let start = current_bounds(window)?;
+
+    if reduced_motion {
+        window.set_position(target.position)?;
+        window.set_size(target.size)?;
+        return Ok(());
+    }
+
+    let started = Instant::now();
+    loop {
+        if ANIMATION_GENERATION.load(Ordering::SeqCst) != generation {
+            return Ok(());
+        }
+        let raw_progress = (started.elapsed().as_secs_f64() / duration.as_secs_f64()).min(1.0);
+        let progress = ease_out_cubic(raw_progress);
+        window.set_position(PhysicalPosition::new(
+            interpolate_i32(start.position.x, target.position.x, progress),
+            interpolate_i32(start.position.y, target.position.y, progress),
+        ))?;
+        window.set_size(PhysicalSize::new(
+            interpolate_u32(start.size.width, target.size.width, progress),
+            interpolate_u32(start.size.height, target.size.height, progress),
+        ))?;
+        if raw_progress >= 1.0 {
+            return Ok(());
+        }
+        tokio::time::sleep(FRAME_DURATION).await;
+    }
+}
+
+pub async fn show_chat_panel(app: &AppHandle, reduced_motion: bool) -> tauri::Result<()> {
     let Some(window) = app.get_webview_window(FLOATING_LABEL) else {
         return Err(tauri::Error::WindowNotFound);
     };
-
-    if let Some(position) = expanded_position(app) {
-        window.set_position(tauri::Position::Physical(position))?;
-    }
-    window.set_size(tauri::Size::Logical(tauri::LogicalSize {
-        width: CHAT_WIDTH,
-        height: CHAT_HEIGHT,
-    }))?;
-    window.set_resizable(true)?;
+    let target = expanded_bounds(&window)?;
+    window.set_resizable(false)?;
     window.emit("surface://changed", "chat")?;
     window.show()?;
+    animate_window_bounds(&window, target, EXPAND_DURATION, reduced_motion).await?;
+    window.set_resizable(true)?;
     window.set_focus()?;
     Ok(())
 }
 
-pub fn show_floating_ball(app: &AppHandle) -> tauri::Result<()> {
+pub async fn show_floating_ball(app: &AppHandle, reduced_motion: bool) -> tauri::Result<()> {
     let Some(window) = app.get_webview_window(FLOATING_LABEL) else {
         return Err(tauri::Error::WindowNotFound);
     };
-
+    let current = current_bounds(&window)?;
+    let size = logical_size(&window, FLOATING_SIZE, FLOATING_SIZE)?;
+    let target = WindowBounds {
+        position: current.position,
+        size,
+    };
+    window.set_resizable(false)?;
+    animate_window_bounds(&window, target, COLLAPSE_DURATION, reduced_motion).await?;
+    window.emit("surface://changed", "floating")?;
     let always_on_top = settings::load_settings(app)
         .map(|stored| stored.floating_always_on_top)
         .unwrap_or(true);
-    window.emit("surface://changed", "floating")?;
-    window.set_resizable(false)?;
-    window.set_size(tauri::Size::Logical(tauri::LogicalSize {
-        width: FLOATING_SIZE,
-        height: FLOATING_SIZE,
-    }))?;
     window.set_always_on_top(always_on_top)?;
     window.show()?;
     window.set_focus()?;
@@ -70,10 +154,7 @@ pub fn show_settings_panel(app: &AppHandle) -> tauri::Result<()> {
     let Some(window) = app.get_webview_window(FLOATING_LABEL) else {
         return Err(tauri::Error::WindowNotFound);
     };
-    window.set_size(tauri::Size::Logical(tauri::LogicalSize {
-        width: 460.0,
-        height: 560.0,
-    }))?;
+    window.set_size(logical_size(&window, SETTINGS_WIDTH, SETTINGS_HEIGHT)?)?;
     window.set_resizable(false)?;
     window.emit("surface://changed", "settings")?;
     window.show()?;
@@ -88,16 +169,33 @@ pub fn hide_all_windows(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-pub fn toggle_chat_panel(app: &AppHandle) -> tauri::Result<()> {
-    let Some(window) = app.get_webview_window(FLOATING_LABEL) else {
-        return Err(tauri::Error::WindowNotFound);
-    };
-    let size = window.inner_size()?;
-    if size.width > 100 {
-        show_floating_ball(app)
-    } else {
-        show_chat_panel(app)
-    }
+pub fn request_show_chat_panel(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let _ = show_chat_panel(&app, false).await;
+    });
+}
+
+pub fn request_show_floating_ball(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let _ = show_floating_ball(&app, false).await;
+    });
+}
+
+pub fn request_toggle_chat_panel(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let is_expanded = app
+            .get_webview_window(FLOATING_LABEL)
+            .and_then(|window| window.inner_size().ok())
+            .is_some_and(|size| size.width > 100);
+        if is_expanded {
+            let _ = show_floating_ball(&app, false).await;
+        } else {
+            let _ = show_chat_panel(&app, false).await;
+        }
+    });
 }
 
 pub fn restore_floating_position(app: &AppHandle) {
@@ -108,10 +206,7 @@ pub fn restore_floating_position(app: &AppHandle) {
         return;
     };
     if let Some(window) = app.get_webview_window(FLOATING_LABEL) {
-        let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
-            x: position.x,
-            y: position.y,
-        }));
+        let _ = window.set_position(PhysicalPosition::new(position.x, position.y));
     }
 }
 
@@ -139,4 +234,22 @@ pub fn attach_floating_position_persistence(app: &AppHandle) {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn easing_starts_and_finishes_at_bounds() {
+        assert_eq!(ease_out_cubic(0.0), 0.0);
+        assert_eq!(ease_out_cubic(1.0), 1.0);
+        assert!(ease_out_cubic(0.5) > 0.5);
+    }
+
+    #[test]
+    fn interpolation_reaches_target() {
+        assert_eq!(interpolate_i32(10, 100, 1.0), 100);
+        assert_eq!(interpolate_u32(50, 480, 1.0), 480);
+    }
 }

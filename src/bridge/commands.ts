@@ -24,8 +24,8 @@ export interface ChatMessageInput {
 }
 
 export const commands = {
-  showChatPanel: () => invoke<void>('show_chat_panel'),
-  showFloatingBall: () => invoke<void>('show_floating_ball'),
+  showChatPanel: (reducedMotion = false) => invoke<void>('show_chat_panel', { reducedMotion }),
+  showFloatingBall: (reducedMotion = false) => invoke<void>('show_floating_ball', { reducedMotion }),
   showSettingsPanel: () => invoke<void>('show_settings_panel'),
   hideAllWindows: () => invoke<void>('hide_all_windows'),
   getSettings: () => invoke<AppSettings>('get_settings'),
