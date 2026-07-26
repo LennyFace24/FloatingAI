@@ -1,6 +1,8 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import type { ChatMessage, ConversationStatus } from './conversation';
 import { RichMessage } from './RichMessage';
+import { IconButton } from '../ui/IconButton';
+import { ArrowUp, Minus, Square, Trash2, Wrench } from '../ui/icons';
 
 interface ChatPanelProps {
   messages: ChatMessage[];
@@ -55,49 +57,67 @@ export function ChatPanel({
   }
 
   return (
-    <section className="chat-panel" aria-label="AI 对话">
+    <section className="chat-panel surface-panel" aria-label="AI 对话">
       <header className="panel-header">
-        <strong>Floating AI</strong>
         <div className="panel-actions">
-          <button type="button" onClick={onOpenSettings} aria-label="打开设置">设置</button>
-          <button type="button" onClick={onCollapse} aria-label="收起">收起</button>
+          <IconButton label="打开设置" tooltip="设置" onClick={onOpenSettings}>
+            <Wrench size={16} />
+          </IconButton>
+          <IconButton label="收起" tooltip="收起为悬浮球" onClick={onCollapse}>
+            <Minus size={17} />
+          </IconButton>
         </div>
       </header>
 
       <div className="message-list" aria-live="polite" ref={listRef}>
+        {messages.length === 0 ? (
+          <div className="empty-state">
+            <span className="empty-prompt">&gt;_</span>
+            <p>输入问题开始对话</p>
+          </div>
+        ) : null}
         {messages.map((message) => (
           <article className={`message message-${message.role}`} key={message.id}>
             {message.role === 'assistant' ? (
-              message.content ? <RichMessage content={message.content} /> : <p>正在生成...</p>
+              message.content ? <RichMessage content={message.content} /> : <p className="typing-state">正在生成</p>
             ) : (
               <p>{message.content}</p>
             )}
-            {message.role === 'assistant' && message.content ? (
-              <button type="button" onClick={() => void navigator.clipboard.writeText(message.content)}>
-                复制
-              </button>
-            ) : null}
-            {message.finishReason === 'stopped' ? <small>已停止</small> : null}
+            {message.finishReason === 'stopped' ? <small className="message-state">已停止</small> : null}
           </article>
         ))}
-        {error ? <p role="alert">{error}</p> : null}
+        {error ? <p className="chat-error" role="alert">{error}</p> : null}
       </div>
 
-      <form className="composer" onSubmit={handleSubmit}>
-        <textarea
-          ref={inputRef}
-          aria-label="输入问题"
-          value={input}
-          onChange={(event) => setInput(event.currentTarget.value)}
-          rows={3}
-        />
-        <div className="composer-actions">
-          <button type="button" onClick={onClear}>清空</button>
-          {status === 'streaming' && activeRequestId ? (
-            <button type="button" onClick={() => void onStop(activeRequestId)}>停止</button>
-          ) : (
-            <button type="submit">发送</button>
-          )}
+      <form className="composer-area" onSubmit={handleSubmit}>
+        <div className="composer">
+          <textarea
+            ref={inputRef}
+            aria-label="输入问题"
+            placeholder="> 输入问题…"
+            value={input}
+            onChange={(event) => setInput(event.currentTarget.value)}
+            rows={2}
+          />
+          <div className="composer-actions">
+            <IconButton label="清空对话" tooltip="清空对话" onClick={onClear} disabled={messages.length === 0}>
+              <Trash2 size={15} />
+            </IconButton>
+            {status === 'streaming' && activeRequestId ? (
+              <IconButton
+                className="primary-action"
+                label="停止"
+                tooltip="停止生成"
+                onClick={() => void onStop(activeRequestId)}
+              >
+                <Square size={14} fill="currentColor" />
+              </IconButton>
+            ) : (
+              <IconButton className="primary-action" label="发送" tooltip="发送" type="submit" disabled={!input.trim()}>
+                <ArrowUp size={16} />
+              </IconButton>
+            )}
+          </div>
         </div>
       </form>
     </section>

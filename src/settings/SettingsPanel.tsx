@@ -1,5 +1,7 @@
 import { FormEvent, useState } from 'react';
 import { normalizeSettingsForm, type SettingsFormInput, validateSettingsForm } from './settings';
+import { IconButton } from '../ui/IconButton';
+import { Minus } from '../ui/icons';
 
 interface SettingsPanelProps {
   initialSettings: SettingsFormInput;
@@ -32,10 +34,12 @@ export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPane
   }
 
   return (
-    <section className="settings-panel" aria-label="设置">
-      <header className="panel-header">
+    <section className="settings-panel surface-panel" aria-label="设置">
+      <header className="panel-header settings-header">
         <h1>设置</h1>
-        <button type="button" onClick={onClose} aria-label="关闭设置">×</button>
+        <IconButton label="关闭设置" tooltip="返回对话" onClick={onClose}>
+          <Minus size={17} />
+        </IconButton>
       </header>
       <form className="settings-form" onSubmit={handleSubmit}>
         <label>
@@ -81,9 +85,7 @@ export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPane
             onChange={(event) => setForm({ ...form, globalShortcut: event.currentTarget.value })}
           />
         </label>
-        {errors.globalShortcut ? (
-          <p className="field-error" role="alert">{errors.globalShortcut}</p>
-        ) : null}
+        {errors.globalShortcut ? <p className="field-error" role="alert">{errors.globalShortcut}</p> : null}
 
         <label className="checkbox-row">
           <input
@@ -104,7 +106,9 @@ export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPane
         </label>
 
         {saveError ? <p className="field-error" role="alert">{saveError}</p> : null}
-        <button type="submit" disabled={saving}>{saving ? '保存中' : '保存设置'}</button>
+        <button className="save-button" type="submit" disabled={saving}>
+          {saving ? '保存中' : '保存设置'}
+        </button>
       </form>
     </section>
   );
