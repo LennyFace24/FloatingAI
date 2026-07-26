@@ -4,6 +4,7 @@ import { RichMessage } from './RichMessage';
 import { IconButton } from '../ui/IconButton';
 import { ArrowUp, Minus, Square, Trash2, Wrench } from '../ui/icons';
 
+
 interface ChatPanelProps {
   messages: ChatMessage[];
   status: ConversationStatus;
