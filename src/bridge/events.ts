@@ -14,6 +14,8 @@ export interface ChatErrorPayload {
   message: string;
 }
 
+export type SurfaceChangedPayload = 'floating' | 'chat';
+
 export const events = {
   onChatDelta: (handler: (payload: ChatDeltaPayload) => void): Promise<UnlistenFn> =>
     listen<ChatDeltaPayload>('chat://delta', (event) => handler(event.payload)),
@@ -21,4 +23,6 @@ export const events = {
     listen<ChatDonePayload>('chat://done', (event) => handler(event.payload)),
   onChatError: (handler: (payload: ChatErrorPayload) => void): Promise<UnlistenFn> =>
     listen<ChatErrorPayload>('chat://error', (event) => handler(event.payload)),
+  onSurfaceChanged: (handler: (payload: SurfaceChangedPayload) => void): Promise<UnlistenFn> =>
+    listen<SurfaceChangedPayload>('surface://changed', (event) => handler(event.payload)),
 };

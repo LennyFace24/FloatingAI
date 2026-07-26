@@ -1,86 +1,43 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FLOATING_BALL_SIZE, FLOATING_WINDOW_SIZE } from './floatingGeometry';
 
-const outerPosition = vi.fn(() => Promise.resolve({ x: 100, y: 200 }));
-const setPosition = vi.fn((_position: { x: number; y: number }) => Promise.resolve());
+const startDragging = vi.fn(() => Promise.resolve());
 
 vi.mock('@tauri-apps/api/window', () => ({
-  getCurrentWindow: () => ({ outerPosition, setPosition }),
-  PhysicalPosition: class PhysicalPosition {
-    constructor(public x: number, public y: number) {}
-  },
+  getCurrentWindow: () => ({ startDragging }),
 }));
 
 import { FloatingBall } from './FloatingBall';
 
 describe('FloatingBall', () => {
   beforeEach(() => {
-    outerPosition.mockClear();
-    setPosition.mockClear();
+    startDragging.mockClear();
   });
 
-  it('activates chat after a stationary pointer release', async () => {
+  it('activates only through the button click event', () => {
     const onActivate = vi.fn();
     render(<FloatingBall isBusy={false} onActivate={onActivate} />);
     const button = screen.getByRole('button', { name: '打开 AI 对话' });
 
-    fireEvent.pointerDown(button, {
-      clientX: 10,
-      clientY: 10,
-      screenX: 510,
-      screenY: 410,
-      pointerId: 1,
-      button: 0,
-    });
-    await waitFor(() => expect(outerPosition).toHaveBeenCalledOnce());
-    fireEvent.pointerUp(button, {
-      clientX: 10,
-      clientY: 10,
-      screenX: 510,
-      screenY: 410,
-      pointerId: 1,
-      button: 0,
-    });
+    fireEvent.pointerDown(button, { clientX: 10, clientY: 10, pointerId: 1, button: 0 });
+    fireEvent.pointerUp(button, { clientX: 10, clientY: 10, pointerId: 1, button: 0 });
+    expect(onActivate).not.toHaveBeenCalled();
 
-    expect(setPosition).not.toHaveBeenCalled();
+    fireEvent.click(button);
     expect(onActivate).toHaveBeenCalledOnce();
   });
 
-  it('moves the window and does not activate after dragging', async () => {
+  it('starts native drag after moving and suppresses the following click', () => {
     const onActivate = vi.fn();
     render(<FloatingBall isBusy={false} onActivate={onActivate} />);
     const button = screen.getByRole('button', { name: '打开 AI 对话' });
 
-    fireEvent.pointerDown(button, {
-      clientX: 10,
-      clientY: 10,
-      screenX: 510,
-      screenY: 410,
-      pointerId: 1,
-      button: 0,
-    });
-    await waitFor(() => expect(outerPosition).toHaveBeenCalledOnce());
-    fireEvent.pointerMove(button, {
-      clientX: 20,
-      clientY: 20,
-      screenX: 530,
-      screenY: 440,
-      pointerId: 1,
-      buttons: 1,
-    });
+    fireEvent.pointerDown(button, { clientX: 10, clientY: 10, pointerId: 1, button: 0 });
+    fireEvent.pointerMove(button, { clientX: 20, clientY: 20, pointerId: 1, buttons: 1 });
 
-    await waitFor(() => expect(setPosition).toHaveBeenCalledOnce());
-    expect(setPosition.mock.calls[0][0]).toMatchObject({ x: 120, y: 230 });
-
-    fireEvent.pointerUp(button, {
-      clientX: 20,
-      clientY: 20,
-      screenX: 530,
-      screenY: 440,
-      pointerId: 1,
-      button: 0,
-    });
+    expect(startDragging).toHaveBeenCalledOnce();
+    fireEvent.click(button);
     expect(onActivate).not.toHaveBeenCalled();
   });
 

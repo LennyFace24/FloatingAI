@@ -13,50 +13,15 @@ import { defaultSettingsForm, type SettingsFormInput } from './settings/settings
 import { SettingsPanel } from './settings/SettingsPanel';
 import './styles/app.css';
 
-type WindowRole = 'floating' | 'chat' | 'settings';
+type MainSurface = 'floating' | 'chat';
 
-function currentWindowRole(): WindowRole {
-  try {
-    const label = getCurrentWindow().label;
-    if (label === 'chat') return 'chat';
-    if (label === 'settings') return 'settings';
-    return 'floating';
-  } catch {
-    return 'floating';
-  }
-}
-
-function FloatingSurface() {
-  const [isBusy, setIsBusy] = useState(false);
-
-  useEffect(() => {
-    const unlisten = Promise.all([
-      events.onChatDelta(() => setIsBusy(true)),
-      events.onChatDone(() => setIsBusy(false)),
-      events.onChatError(() => setIsBusy(false)),
-    ]);
-    return () => {
-      void unlisten.then((listeners) => listeners.forEach((listener) => listener()));
-    };
-  }, []);
-
-  return (
-    <FloatingBall
-      isBusy={isBusy}
-      onActivate={() => {
-        void commands.showChatPanel().catch((error) => {
-          console.error('打开对话窗口失败', error);
-        });
-      }}
-    />
-  );
-}
-
-function ChatSurface() {
+function MainWindow() {
+  const [surface, setSurface] = useState<MainSurface>('floating');
   const [conversation, dispatch] = useReducer(conversationReducer, initialConversationState);
 
   useEffect(() => {
     const unlisten = Promise.all([
+      events.onSurfaceChanged(setSurface),
       events.onChatDelta((payload) => dispatch({ type: 'delta', ...payload })),
       events.onChatDone((payload) => dispatch({ type: 'done', ...payload })),
       events.onChatError((payload) =>
@@ -82,22 +47,41 @@ function ChatSurface() {
     dispatch({ type: 'stopped', requestId });
   }
 
+  if (surface === 'chat') {
+    return (
+      <ChatPanel
+        messages={conversation.messages}
+        status={conversation.status}
+        activeRequestId={conversation.activeRequestId}
+        error={conversation.error}
+        onSend={sendMessage}
+        onStop={stopMessage}
+        onClear={() => dispatch({ type: 'clear' })}
+        onCollapse={() => {
+          void commands
+            .showFloatingBall()
+            .then(() => setSurface('floating'))
+            .catch((error) => console.error('收起对话面板失败', error));
+        }}
+        onOpenSettings={() => void commands.showSettingsPanel()}
+      />
+    );
+  }
+
   return (
-    <ChatPanel
-      messages={conversation.messages}
-      status={conversation.status}
-      activeRequestId={conversation.activeRequestId}
-      error={conversation.error}
-      onSend={sendMessage}
-      onStop={stopMessage}
-      onClear={() => dispatch({ type: 'clear' })}
-      onCollapse={() => void commands.showFloatingBall()}
-      onOpenSettings={() => void commands.showSettingsPanel()}
+    <FloatingBall
+      isBusy={conversation.status === 'streaming'}
+      onActivate={() => {
+        void commands
+          .showChatPanel()
+          .then(() => setSurface('chat'))
+          .catch((error) => console.error('打开对话面板失败', error));
+      }}
     />
   );
 }
 
-function SettingsSurface() {
+function SettingsWindow() {
   const [initialSettings, setInitialSettings] = useState<SettingsFormInput | null>(null);
 
   useEffect(() => {
@@ -116,9 +100,7 @@ function SettingsSurface() {
       .catch(() => setInitialSettings(defaultSettingsForm));
   }, []);
 
-  if (!initialSettings) {
-    return <p>加载设置...</p>;
-  }
+  if (!initialSettings) return <p>加载设置...</p>;
 
   return (
     <SettingsPanel
@@ -133,8 +115,5 @@ function SettingsSurface() {
 }
 
 export default function App() {
-  const role = currentWindowRole();
-  if (role === 'chat') return <ChatSurface />;
-  if (role === 'settings') return <SettingsSurface />;
-  return <FloatingSurface />;
+  return getCurrentWindow().label === 'settings' ? <SettingsWindow /> : <MainWindow />;
 }

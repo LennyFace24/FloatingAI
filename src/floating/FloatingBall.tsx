@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { FLOATING_BALL_SIZE } from './floatingGeometry';
 
 interface FloatingBallProps {
@@ -8,18 +8,15 @@ interface FloatingBallProps {
 }
 
 interface PointerStart {
-  pointerId: number;
-  screenX: number;
-  screenY: number;
-  windowX?: number;
-  windowY?: number;
-  dragged: boolean;
+  x: number;
+  y: number;
 }
 
 const DRAG_THRESHOLD_PX = 4;
 
 export function FloatingBall({ isBusy, onActivate }: FloatingBallProps) {
   const pointerStart = useRef<PointerStart | null>(null);
+  const suppressClick = useRef(false);
 
   return (
     <button
@@ -27,53 +24,36 @@ export function FloatingBall({ isBusy, onActivate }: FloatingBallProps) {
       style={{ width: FLOATING_BALL_SIZE, height: FLOATING_BALL_SIZE }}
       type="button"
       aria-label={isBusy ? 'AI 正在回复' : '打开 AI 对话'}
+      onClick={() => {
+        if (suppressClick.current) {
+          suppressClick.current = false;
+          return;
+        }
+        onActivate();
+      }}
       onPointerDown={(event) => {
         if (event.button !== 0) return;
-
-        event.currentTarget.setPointerCapture?.(event.pointerId);
-        const start: PointerStart = {
-          pointerId: event.pointerId,
-          screenX: event.screenX,
-          screenY: event.screenY,
-          dragged: false,
-        };
-        pointerStart.current = start;
-
-        void getCurrentWindow()
-          .outerPosition()
-          .then((position) => {
-            if (pointerStart.current !== start) return;
-            start.windowX = position.x;
-            start.windowY = position.y;
-          });
+        pointerStart.current = { x: event.clientX, y: event.clientY };
+        suppressClick.current = false;
       }}
       onPointerMove={(event) => {
         const start = pointerStart.current;
-        if (
-          !start ||
-          start.pointerId !== event.pointerId ||
-          start.windowX === undefined ||
-          start.windowY === undefined
-        ) {
-          return;
-        }
+        if (!start || suppressClick.current || (event.buttons & 1) === 0) return;
 
-        const deltaX = event.screenX - start.screenX;
-        const deltaY = event.screenY - start.screenY;
-        if (!start.dragged && Math.hypot(deltaX, deltaY) < DRAG_THRESHOLD_PX) return;
+        const distance = Math.hypot(event.clientX - start.x, event.clientY - start.y);
+        if (distance < DRAG_THRESHOLD_PX) return;
 
-        start.dragged = true;
-        void getCurrentWindow().setPosition(
-          new PhysicalPosition(start.windowX + deltaX, start.windowY + deltaY),
-        );
-      }}
-      onPointerUp={(event) => {
-        const start = pointerStart.current;
-        if (!start || start.pointerId !== event.pointerId) return;
-
+        suppressClick.current = true;
         pointerStart.current = null;
-        event.currentTarget.releasePointerCapture?.(event.pointerId);
-        if (!start.dragged) onActivate();
+        void getCurrentWindow()
+          .startDragging()
+          .catch((error) => {
+            suppressClick.current = false;
+            console.error('拖动悬浮球失败', error);
+          });
+      }}
+      onPointerUp={() => {
+        pointerStart.current = null;
       }}
       onPointerCancel={() => {
         pointerStart.current = null;

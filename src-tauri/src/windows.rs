@@ -1,29 +1,13 @@
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 use crate::settings;
 
 pub const FLOATING_LABEL: &str = "floating";
-pub const CHAT_LABEL: &str = "chat";
 pub const SETTINGS_LABEL: &str = "settings";
 
+const FLOATING_SIZE: f64 = 50.0;
 const CHAT_WIDTH: f64 = 480.0;
 const CHAT_HEIGHT: f64 = 620.0;
-
-fn ensure_chat_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
-    if let Some(window) = app.get_webview_window(CHAT_LABEL) {
-        return Ok(window);
-    }
-
-    WebviewWindowBuilder::new(app, CHAT_LABEL, WebviewUrl::App("index.html".into()))
-        .title("Floating AI")
-        .inner_size(CHAT_WIDTH, CHAT_HEIGHT)
-        .resizable(true)
-        .decorations(false)
-        .always_on_top(true)
-        .skip_taskbar(true)
-        .visible(false)
-        .build()
-}
 
 fn ensure_settings_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     if let Some(window) = app.get_webview_window(SETTINGS_LABEL) {
@@ -41,63 +25,63 @@ fn ensure_settings_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
         .build()
 }
 
-fn chat_position_near_floating(app: &AppHandle) -> Option<tauri::PhysicalPosition<i32>> {
-    let floating = app.get_webview_window(FLOATING_LABEL)?;
-    let floating_pos = floating.outer_position().ok()?;
-    let monitor = floating.current_monitor().ok().flatten()?;
+fn expanded_position(app: &AppHandle) -> Option<tauri::PhysicalPosition<i32>> {
+    let window = app.get_webview_window(FLOATING_LABEL)?;
+    let current = window.outer_position().ok()?;
+    let monitor = window.current_monitor().ok().flatten()?;
     let monitor_pos = monitor.position();
     let monitor_size = monitor.size();
     let scale = monitor.scale_factor();
-    let chat_width = (CHAT_WIDTH * scale) as i32;
-    let chat_height = (CHAT_HEIGHT * scale) as i32;
-
-    let mut x = floating_pos.x + 16;
-    let mut y = floating_pos.y + 16;
+    let width = (CHAT_WIDTH * scale) as i32;
+    let height = (CHAT_HEIGHT * scale) as i32;
 
     let right_edge = monitor_pos.x + monitor_size.width as i32;
     let bottom_edge = monitor_pos.y + monitor_size.height as i32;
-
-    if x + chat_width > right_edge {
-        x = right_edge - chat_width;
-    }
-    if y + chat_height > bottom_edge {
-        y = bottom_edge - chat_height;
-    }
-    x = x.max(monitor_pos.x);
-    y = y.max(monitor_pos.y);
+    let x = current.x.min(right_edge - width).max(monitor_pos.x);
+    let y = current.y.min(bottom_edge - height).max(monitor_pos.y);
 
     Some(tauri::PhysicalPosition { x, y })
 }
 
 pub fn show_chat_panel(app: &AppHandle) -> tauri::Result<()> {
-    let chat = ensure_chat_window(app)?;
-    if let Some(position) = chat_position_near_floating(app) {
-        let _ = chat.set_position(tauri::Position::Physical(position));
-    } else {
-        let _ = chat.center();
+    let Some(window) = app.get_webview_window(FLOATING_LABEL) else {
+        return Err(tauri::Error::WindowNotFound);
+    };
+
+    if let Some(position) = expanded_position(app) {
+        window.set_position(tauri::Position::Physical(position))?;
     }
-    if let Some(floating) = app.get_webview_window(FLOATING_LABEL) {
-        floating.hide()?;
-    }
-    chat.show()?;
-    chat.set_focus()?;
+    window.set_size(tauri::Size::Logical(tauri::LogicalSize {
+        width: CHAT_WIDTH,
+        height: CHAT_HEIGHT,
+    }))?;
+    window.set_resizable(true)?;
+    window.emit("surface://changed", "chat")?;
+    window.show()?;
+    window.set_focus()?;
     Ok(())
 }
 
 pub fn show_floating_ball(app: &AppHandle) -> tauri::Result<()> {
-    if let Some(chat) = app.get_webview_window(CHAT_LABEL) {
-        chat.hide()?;
-    }
     if let Some(settings_window) = app.get_webview_window(SETTINGS_LABEL) {
         settings_window.hide()?;
     }
-    if let Some(floating) = app.get_webview_window(FLOATING_LABEL) {
-        let always_on_top = settings::load_settings(app)
-            .map(|stored| stored.floating_always_on_top)
-            .unwrap_or(true);
-        let _ = floating.set_always_on_top(always_on_top);
-        floating.show()?;
-    }
+    let Some(window) = app.get_webview_window(FLOATING_LABEL) else {
+        return Err(tauri::Error::WindowNotFound);
+    };
+
+    let always_on_top = settings::load_settings(app)
+        .map(|stored| stored.floating_always_on_top)
+        .unwrap_or(true);
+    window.emit("surface://changed", "floating")?;
+    window.set_resizable(false)?;
+    window.set_size(tauri::Size::Logical(tauri::LogicalSize {
+        width: FLOATING_SIZE,
+        height: FLOATING_SIZE,
+    }))?;
+    window.set_always_on_top(always_on_top)?;
+    window.show()?;
+    window.set_focus()?;
     Ok(())
 }
 
@@ -110,7 +94,7 @@ pub fn show_settings_panel(app: &AppHandle) -> tauri::Result<()> {
 }
 
 pub fn hide_all_windows(app: &AppHandle) -> tauri::Result<()> {
-    for label in [FLOATING_LABEL, CHAT_LABEL, SETTINGS_LABEL] {
+    for label in [FLOATING_LABEL, SETTINGS_LABEL] {
         if let Some(window) = app.get_webview_window(label) {
             window.hide()?;
         }
@@ -119,12 +103,11 @@ pub fn hide_all_windows(app: &AppHandle) -> tauri::Result<()> {
 }
 
 pub fn toggle_chat_panel(app: &AppHandle) -> tauri::Result<()> {
-    let chat_visible = app
-        .get_webview_window(CHAT_LABEL)
-        .and_then(|window| window.is_visible().ok())
-        .unwrap_or(false);
-
-    if chat_visible {
+    let Some(window) = app.get_webview_window(FLOATING_LABEL) else {
+        return Err(tauri::Error::WindowNotFound);
+    };
+    let size = window.inner_size()?;
+    if size.width > 100 {
         show_floating_ball(app)
     } else {
         show_chat_panel(app)
@@ -154,6 +137,11 @@ pub fn attach_floating_position_persistence(app: &AppHandle) {
     let window_for_read = window.clone();
     window.on_window_event(move |event| {
         if matches!(event, tauri::WindowEvent::Moved(_)) {
+            if let Ok(size) = window_for_read.inner_size() {
+                if size.width > 100 {
+                    return;
+                }
+            }
             if let Ok(position) = window_for_read.outer_position() {
                 if let Ok(mut stored) = settings::load_settings(&app_handle) {
                     stored.floating_position = Some(settings::WindowPosition {

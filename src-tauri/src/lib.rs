@@ -8,7 +8,10 @@ mod windows;
 
 #[tauri::command]
 fn show_chat_panel(app: tauri::AppHandle) -> Result<(), String> {
-    windows::show_chat_panel(&app).map_err(|error| error.to_string())
+    windows::show_chat_panel(&app).map_err(|error| {
+        eprintln!("[floating-ai] show_chat_panel failed: {error}");
+        error.to_string()
+    })
 }
 
 #[tauri::command]
