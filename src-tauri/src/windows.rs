@@ -5,6 +5,9 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, Webview
 
 use crate::settings;
 
+#[cfg(windows)]
+use windows_sys::Win32::UI::WindowsAndMessaging::{SetWindowPos, SWP_NOACTIVATE, SWP_NOZORDER};
+
 pub const FLOATING_LABEL: &str = "floating";
 
 const FLOATING_SIZE: f64 = 50.0;
@@ -14,7 +17,7 @@ const SETTINGS_WIDTH: f64 = 460.0;
 const SETTINGS_HEIGHT: f64 = 560.0;
 const EXPAND_DURATION: Duration = Duration::from_millis(280);
 const COLLAPSE_DURATION: Duration = Duration::from_millis(180);
-const FRAME_DURATION: Duration = Duration::from_millis(16);
+const FRAME_DURATION: Duration = Duration::from_millis(8);
 
 static ANIMATION_GENERATION: AtomicU64 = AtomicU64::new(0);
 
@@ -60,9 +63,16 @@ fn expanded_bounds(window: &WebviewWindow) -> tauri::Result<WindowBounds> {
     Ok(WindowBounds { position, size })
 }
 
-fn logical_size(window: &WebviewWindow, width: f64, height: f64) -> tauri::Result<PhysicalSize<u32>> {
+fn logical_size(
+    window: &WebviewWindow,
+    width: f64,
+    height: f64,
+) -> tauri::Result<PhysicalSize<u32>> {
     let scale = window.scale_factor()?;
-    Ok(PhysicalSize::new((width * scale) as u32, (height * scale) as u32))
+    Ok(PhysicalSize::new(
+        (width * scale) as u32,
+        (height * scale) as u32,
+    ))
 }
 
 fn interpolate_i32(start: i32, end: i32, progress: f64) -> i32 {
@@ -77,6 +87,35 @@ fn ease_out_cubic(progress: f64) -> f64 {
     1.0 - (1.0 - progress).powi(3)
 }
 
+fn set_window_bounds(window: &WebviewWindow, bounds: WindowBounds) -> tauri::Result<()> {
+    #[cfg(windows)]
+    {
+        let hwnd = window.hwnd()?;
+        let result = unsafe {
+            SetWindowPos(
+                hwnd.0 as _,
+                std::ptr::null_mut(),
+                bounds.position.x,
+                bounds.position.y,
+                bounds.size.width as i32,
+                bounds.size.height as i32,
+                SWP_NOACTIVATE | SWP_NOZORDER,
+            )
+        };
+        if result == 0 {
+            return Err(std::io::Error::last_os_error().into());
+        }
+        return Ok(());
+    }
+
+    #[cfg(not(windows))]
+    {
+        window.set_position(bounds.position)?;
+        window.set_size(bounds.size)?;
+        Ok(())
+    }
+}
+
 async fn animate_window_bounds(
     window: &WebviewWindow,
     target: WindowBounds,
@@ -87,8 +126,7 @@ async fn animate_window_bounds(
     let start = current_bounds(window)?;
 
     if reduced_motion {
-        window.set_position(target.position)?;
-        window.set_size(target.size)?;
+        set_window_bounds(window, target)?;
         return Ok(());
     }
 
@@ -99,14 +137,19 @@ async fn animate_window_bounds(
         }
         let raw_progress = (started.elapsed().as_secs_f64() / duration.as_secs_f64()).min(1.0);
         let progress = ease_out_cubic(raw_progress);
-        window.set_position(PhysicalPosition::new(
-            interpolate_i32(start.position.x, target.position.x, progress),
-            interpolate_i32(start.position.y, target.position.y, progress),
-        ))?;
-        window.set_size(PhysicalSize::new(
-            interpolate_u32(start.size.width, target.size.width, progress),
-            interpolate_u32(start.size.height, target.size.height, progress),
-        ))?;
+        set_window_bounds(
+            window,
+            WindowBounds {
+                position: PhysicalPosition::new(
+                    interpolate_i32(start.position.x, target.position.x, progress),
+                    interpolate_i32(start.position.y, target.position.y, progress),
+                ),
+                size: PhysicalSize::new(
+                    interpolate_u32(start.size.width, target.size.width, progress),
+                    interpolate_u32(start.size.height, target.size.height, progress),
+                ),
+            },
+        )?;
         if raw_progress >= 1.0 {
             return Ok(());
         }
@@ -245,6 +288,11 @@ mod tests {
         assert_eq!(ease_out_cubic(0.0), 0.0);
         assert_eq!(ease_out_cubic(1.0), 1.0);
         assert!(ease_out_cubic(0.5) > 0.5);
+    }
+
+    #[test]
+    fn animation_frame_budget_supports_high_refresh_displays() {
+        assert!(FRAME_DURATION <= Duration::from_millis(9));
     }
 
     #[test]

@@ -35,7 +35,7 @@ export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPane
 
   return (
     <section className="settings-panel surface-panel" aria-label="设置">
-      <header className="panel-header settings-header">
+      <header className="panel-header settings-header" data-tauri-drag-region>
         <h1>设置</h1>
         <IconButton label="关闭设置" tooltip="返回对话" onClick={onClose}>
           <Minus size={17} />

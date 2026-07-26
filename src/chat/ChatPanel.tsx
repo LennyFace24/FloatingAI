@@ -59,7 +59,7 @@ export function ChatPanel({
 
   return (
     <section className="chat-panel surface-panel" aria-label="AI 对话">
-      <header className="panel-header">
+      <header className="panel-header" data-tauri-drag-region>
         <div className="panel-actions">
           <IconButton label="打开设置" tooltip="设置" onClick={onOpenSettings}>
             <Wrench size={16} />
