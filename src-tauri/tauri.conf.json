@@ -14,8 +14,8 @@
       {
         "label": "floating",
         "title": "Floating AI",
-        "width": 56,
-        "height": 56,
+        "width": 64,
+        "height": 64,
         "decorations": false,
         "transparent": true,
         "shadow": false,

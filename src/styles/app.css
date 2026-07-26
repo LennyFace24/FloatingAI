@@ -10,6 +10,13 @@ body {
   overflow: hidden;
 }
 
+#root {
+  width: 100vw;
+  height: 100vh;
+  display: grid;
+  place-items: center;
+}
+
 button,
 input,
 textarea {
@@ -23,7 +30,7 @@ textarea {
   border-radius: 50%;
   color: #ffffff;
   background: #1f6feb;
-  box-shadow: 0 8px 24px rgb(15 23 42 / 22%);
+  box-shadow: 0 5px 10px rgb(15 23 42 / 24%);
   cursor: pointer;
   display: grid;
   place-items: center;
@@ -34,7 +41,8 @@ textarea {
 }
 
 .floating-ball:hover {
-  transform: scale(1.04);
+  background: #388bfd;
+  box-shadow: 0 5px 12px rgb(15 23 42 / 30%);
 }
 
 .floating-ball[data-busy='true'] {
