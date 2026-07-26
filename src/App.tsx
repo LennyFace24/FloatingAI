@@ -40,7 +40,16 @@ function FloatingSurface() {
     };
   }, []);
 
-  return <FloatingBall isBusy={isBusy} onActivate={() => void commands.showChatPanel()} />;
+  return (
+    <FloatingBall
+      isBusy={isBusy}
+      onActivate={() => {
+        void commands.showChatPanel().catch((error) => {
+          console.error('打开对话窗口失败', error);
+        });
+      }}
+    />
+  );
 }
 
 function ChatSurface() {

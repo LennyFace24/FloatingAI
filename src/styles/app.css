@@ -24,17 +24,17 @@ textarea {
 }
 
 .floating-ball {
-  width: 52px;
-  height: 52px;
+  width: 42px;
+  height: 42px;
   border: 0;
   border-radius: 50%;
   color: #ffffff;
   background: #1f6feb;
-  box-shadow: 0 5px 10px rgb(15 23 42 / 24%);
+  box-shadow: 0 3px 7px rgb(15 23 42 / 24%);
   cursor: pointer;
   display: grid;
   place-items: center;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 700;
   user-select: none;
   -webkit-user-select: none;
@@ -42,7 +42,7 @@ textarea {
 
 .floating-ball:hover {
   background: #388bfd;
-  box-shadow: 0 5px 12px rgb(15 23 42 / 30%);
+  box-shadow: 0 3px 8px rgb(15 23 42 / 30%);
 }
 
 .floating-ball[data-busy='true'] {
