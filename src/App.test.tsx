@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   showPromptBar: vi.fn(() => Promise.resolve()),
   showWaitingBall: vi.fn(() => Promise.resolve()),
   resizeResponsePanel: vi.fn(() => Promise.resolve()),
+  showResponsePanel: vi.fn(() => Promise.resolve()),
   showFloatingBall: vi.fn(() => Promise.resolve()),
   showSettingsPanel: vi.fn(() => Promise.resolve()),
   hideAllWindows: vi.fn(() => Promise.resolve()),
@@ -36,6 +37,7 @@ vi.mock('./bridge/commands', () => ({
     showPromptBar: mocks.showPromptBar,
     showWaitingBall: mocks.showWaitingBall,
     resizeResponsePanel: mocks.resizeResponsePanel,
+    showResponsePanel: mocks.showResponsePanel,
     showFloatingBall: mocks.showFloatingBall,
     showSettingsPanel: mocks.showSettingsPanel,
     hideAllWindows: mocks.hideAllWindows,
@@ -99,6 +101,7 @@ describe('App assistant surface state flow', () => {
     mocks.showPromptBar.mockResolvedValue();
     mocks.showWaitingBall.mockResolvedValue();
     mocks.resizeResponsePanel.mockResolvedValue();
+    mocks.showResponsePanel.mockResolvedValue();
     mocks.showFloatingBall.mockResolvedValue();
     mocks.showSettingsPanel.mockResolvedValue();
     mocks.hideAllWindows.mockResolvedValue();
@@ -122,7 +125,8 @@ describe('App assistant surface state flow', () => {
     await mocks.hideAllWindows();
     const resizeCount = mocks.resizeResponsePanel.mock.calls.length;
     act(() => mocks.showRequestedHandler?.());
-    await waitFor(() => expect(mocks.resizeResponsePanel).toHaveBeenCalledTimes(resizeCount + 1));
+    await waitFor(() => expect(mocks.showResponsePanel).toHaveBeenCalledOnce());
+    expect(mocks.resizeResponsePanel).toHaveBeenCalledTimes(resizeCount);
     expect(await screen.findByRole('log')).toHaveTextContent('partial');
   });
 

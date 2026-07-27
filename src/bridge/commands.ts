@@ -29,6 +29,8 @@ export const commands = {
   showWaitingBall: (reducedMotion = false) => invoke<void>('show_waiting_ball', { reducedMotion }),
   resizeResponsePanel: (contentHeight: number, reducedMotion = false) =>
     invoke<void>('resize_response_panel', { contentHeight, reducedMotion }),
+  showResponsePanel: (contentHeight: number, reducedMotion = false) =>
+    invoke<void>('show_response_panel', { contentHeight, reducedMotion }),
   showChatPanel: (reducedMotion = false) => invoke<void>('show_chat_panel', { reducedMotion }),
   showFloatingBall: (reducedMotion = false) => invoke<void>('show_floating_ball', { reducedMotion }),
   showSettingsPanel: () => invoke<void>('show_settings_panel'),

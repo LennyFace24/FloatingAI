@@ -38,7 +38,7 @@ export default function App() {
     const reducedMotion = prefersReducedMotion();
     if (phase === 'prompt') await commands.showPromptBar(reducedMotion);
     else if (phase === 'waiting') await commands.showWaitingBall(reducedMotion);
-    else await commands.resizeResponsePanel(RESPONSE_MIN_HEIGHT, reducedMotion);
+    else await commands.showResponsePanel(RESPONSE_MIN_HEIGHT, reducedMotion);
   }
 
   function dispatchConversation(action: Parameters<typeof conversationReducer>[1]) {

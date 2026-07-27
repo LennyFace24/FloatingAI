@@ -37,6 +37,16 @@ async fn resize_response_panel(
         .await
         .map_err(|error| error.to_string())
 }
+#[tauri::command]
+async fn show_response_panel(
+    app: tauri::AppHandle,
+    content_height: f64,
+    reduced_motion: bool,
+) -> Result<(), String> {
+    windows::show_response_panel(&app, content_height, reduced_motion)
+        .await
+        .map_err(|error| error.to_string())
+}
 
 #[tauri::command]
 async fn show_chat_panel(app: tauri::AppHandle, reduced_motion: bool) -> Result<(), String> {
@@ -128,6 +138,7 @@ pub fn run() {
             show_prompt_bar,
             show_waiting_ball,
             resize_response_panel,
+            show_response_panel,
             show_chat_panel,
             show_floating_ball,
             show_settings_panel,

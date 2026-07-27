@@ -236,6 +236,15 @@ enum ToggleAction {
     Collapse,
     RequestShow,
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ToggleReservation {
+    previous: WindowMode,
+    action: ToggleAction,
+}
+
+fn finalize_toggle(reservation: ToggleReservation, successful_mode: Option<WindowMode>) -> WindowMode {
+    successful_mode.unwrap_or(reservation.previous)
+}
 
 fn toggle_action(mode: WindowMode) -> ToggleAction {
     match mode {
@@ -259,7 +268,7 @@ fn completed_mode(target: WindowMode, outcome: AnimationOutcome) -> Option<Windo
     outcome.should_finish_transition().then_some(target)
 }
 
-fn reserve_toggle() -> Option<ToggleAction> {
+fn reserve_toggle() -> Option<ToggleReservation> {
     loop {
         let current = current_window_mode();
         let (reserved, action) = begin_toggle(current);
@@ -270,9 +279,19 @@ fn reserve_toggle() -> Option<ToggleAction> {
             Ordering::SeqCst,
             Ordering::SeqCst,
         ).is_ok() {
-            return Some(action);
+            return Some(ToggleReservation { previous: current, action });
         }
     }
+}
+
+fn finish_reserved_toggle(reservation: ToggleReservation, successful_mode: Option<WindowMode>) {
+    let final_mode = finalize_toggle(reservation, successful_mode);
+    let _ = WINDOW_MODE.compare_exchange(
+        WindowMode::Transitioning as u64,
+        final_mode as u64,
+        Ordering::SeqCst,
+        Ordering::SeqCst,
+    );
 }
 
 async fn animate_window_bounds(
@@ -397,14 +416,25 @@ pub async fn resize_response_panel(
         return Err(tauri::Error::WindowNotFound);
     };
     let target = surface_geometry(&window)?.response_bounds(content_height);
-    window.set_resizable(false)?;
-    window.emit("surface://changed", "chat")?;
-    window.show()?;
     let outcome = animate_window_bounds(&window, target, EXPAND_DURATION, reduced_motion).await?;
     if let Some(mode) = completed_mode(WindowMode::Response, outcome) {
         set_window_mode(mode);
     }
     Ok(())
+}
+
+pub async fn show_response_panel(
+    app: &AppHandle,
+    content_height: f64,
+    reduced_motion: bool,
+) -> tauri::Result<()> {
+    let Some(window) = app.get_webview_window(FLOATING_LABEL) else {
+        return Err(tauri::Error::WindowNotFound);
+    };
+    window.set_resizable(false)?;
+    window.emit("surface://changed", "chat")?;
+    window.show()?;
+    resize_response_panel(app, content_height, reduced_motion).await
 }
 async fn show_bottom_anchored<F: FnOnce(SurfaceGeometry) -> WindowBounds>(
     app: &AppHandle,
@@ -487,13 +517,23 @@ pub fn request_show_floating_ball(app: &AppHandle) {
 }
 
 pub fn request_toggle_chat_panel(app: &AppHandle) {
-    let Some(action) = reserve_toggle() else {
+    let Some(reservation) = reserve_toggle() else {
         return;
     };
-    match action {
-        ToggleAction::Collapse => request_show_floating_ball(app),
-        ToggleAction::RequestShow => request_show_chat_panel(app),
-    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let successful_mode = match reservation.action {
+            ToggleAction::Collapse => show_floating_ball(&app, false)
+                .await
+                .ok()
+                .map(|_| WindowMode::Floating),
+            ToggleAction::RequestShow => app
+                .emit("surface://show-requested", ())
+                .ok()
+                .map(|_| reservation.previous),
+        };
+        finish_reserved_toggle(reservation, successful_mode);
+    });
 }
 
 pub fn restore_floating_position(app: &AppHandle) {
@@ -583,6 +623,13 @@ mod tests {
     fn rapid_toggle_reserves_the_first_transition() {
         assert_eq!(begin_toggle(WindowMode::Waiting), (WindowMode::Transitioning, Some(ToggleAction::Collapse)));
         assert_eq!(begin_toggle(WindowMode::Transitioning), (WindowMode::Transitioning, None));
+    }
+    #[test]
+    fn failed_toggle_rolls_back_and_can_be_reserved_again() {
+        let reservation = ToggleReservation { previous: WindowMode::Waiting, action: ToggleAction::Collapse };
+        assert_eq!(finalize_toggle(reservation, None), WindowMode::Waiting);
+        assert_eq!(begin_toggle(finalize_toggle(reservation, None)).1, Some(ToggleAction::Collapse));
+        assert_eq!(finalize_toggle(reservation, Some(WindowMode::Floating)), WindowMode::Floating);
     }
 
     #[test]
