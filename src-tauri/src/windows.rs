@@ -210,6 +210,7 @@ enum WindowMode {
     Response,
     Settings,
     Hidden,
+    Transitioning,
 }
 
 static WINDOW_MODE: AtomicU64 = AtomicU64::new(WindowMode::Floating as u64);
@@ -221,6 +222,7 @@ fn current_window_mode() -> WindowMode {
         value if value == WindowMode::Response as u64 => WindowMode::Response,
         value if value == WindowMode::Settings as u64 => WindowMode::Settings,
         value if value == WindowMode::Hidden as u64 => WindowMode::Hidden,
+        value if value == WindowMode::Transitioning as u64 => WindowMode::Transitioning,
         _ => WindowMode::Floating,
     }
 }
@@ -240,6 +242,35 @@ fn toggle_action(mode: WindowMode) -> ToggleAction {
         WindowMode::Floating | WindowMode::Hidden => ToggleAction::RequestShow,
         WindowMode::Prompt | WindowMode::Waiting | WindowMode::Response | WindowMode::Settings => {
             ToggleAction::Collapse
+        }
+        WindowMode::Transitioning => unreachable!("transitioning mode has no toggle action"),
+    }
+}
+
+fn begin_toggle(mode: WindowMode) -> (WindowMode, Option<ToggleAction>) {
+    if mode == WindowMode::Transitioning {
+        (mode, None)
+    } else {
+        (WindowMode::Transitioning, Some(toggle_action(mode)))
+    }
+}
+
+fn completed_mode(target: WindowMode, outcome: AnimationOutcome) -> Option<WindowMode> {
+    outcome.should_finish_transition().then_some(target)
+}
+
+fn reserve_toggle() -> Option<ToggleAction> {
+    loop {
+        let current = current_window_mode();
+        let (reserved, action) = begin_toggle(current);
+        let action = action?;
+        if WINDOW_MODE.compare_exchange(
+            current as u64,
+            reserved as u64,
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+        ).is_ok() {
+            return Some(action);
         }
     }
 }
@@ -344,13 +375,17 @@ pub async fn start_floating_drag(app: &AppHandle) -> Result<(), String> {
     }
 }
 pub async fn show_prompt_bar(app: &AppHandle, reduced_motion: bool) -> tauri::Result<()> {
-    show_bottom_anchored(app, |geometry| geometry.prompt_bounds(), reduced_motion).await?;
-    set_window_mode(WindowMode::Prompt);
+    let outcome = show_bottom_anchored(app, |geometry| geometry.prompt_bounds(), reduced_motion).await?;
+    if let Some(mode) = completed_mode(WindowMode::Prompt, outcome) {
+        set_window_mode(mode);
+    }
     Ok(())
 }
 pub async fn show_waiting_ball(app: &AppHandle, reduced_motion: bool) -> tauri::Result<()> {
-    show_bottom_anchored(app, |geometry| geometry.waiting_bounds(), reduced_motion).await?;
-    set_window_mode(WindowMode::Waiting);
+    let outcome = show_bottom_anchored(app, |geometry| geometry.waiting_bounds(), reduced_motion).await?;
+    if let Some(mode) = completed_mode(WindowMode::Waiting, outcome) {
+        set_window_mode(mode);
+    }
     Ok(())
 }
 pub async fn resize_response_panel(
@@ -362,15 +397,20 @@ pub async fn resize_response_panel(
         return Err(tauri::Error::WindowNotFound);
     };
     let target = surface_geometry(&window)?.response_bounds(content_height);
-    let _ = animate_window_bounds(&window, target, EXPAND_DURATION, reduced_motion).await?;
-    set_window_mode(WindowMode::Response);
+    window.set_resizable(false)?;
+    window.emit("surface://changed", "chat")?;
+    window.show()?;
+    let outcome = animate_window_bounds(&window, target, EXPAND_DURATION, reduced_motion).await?;
+    if let Some(mode) = completed_mode(WindowMode::Response, outcome) {
+        set_window_mode(mode);
+    }
     Ok(())
 }
 async fn show_bottom_anchored<F: FnOnce(SurfaceGeometry) -> WindowBounds>(
     app: &AppHandle,
     bounds: F,
     reduced_motion: bool,
-) -> tauri::Result<()> {
+) -> tauri::Result<AnimationOutcome> {
     let Some(window) = app.get_webview_window(FLOATING_LABEL) else {
         return Err(tauri::Error::WindowNotFound);
     };
@@ -382,7 +422,7 @@ async fn show_bottom_anchored<F: FnOnce(SurfaceGeometry) -> WindowBounds>(
     if outcome.should_finish_transition() {
         window.set_focus()?;
     }
-    Ok(())
+    Ok(outcome)
 }
 
 pub async fn show_chat_panel(app: &AppHandle, reduced_motion: bool) -> tauri::Result<()> {
@@ -447,7 +487,10 @@ pub fn request_show_floating_ball(app: &AppHandle) {
 }
 
 pub fn request_toggle_chat_panel(app: &AppHandle) {
-    match toggle_action(current_window_mode()) {
+    let Some(action) = reserve_toggle() else {
+        return;
+    };
+    match action {
         ToggleAction::Collapse => request_show_floating_ball(app),
         ToggleAction::RequestShow => request_show_chat_panel(app),
     }
@@ -529,6 +572,17 @@ mod tests {
         for mode in [WindowMode::Floating, WindowMode::Hidden] {
             assert_eq!(toggle_action(mode), ToggleAction::RequestShow);
         }
+    }
+    #[test]
+    fn cancelled_transition_does_not_publish_its_target_mode() {
+        assert_eq!(completed_mode(WindowMode::Prompt, AnimationOutcome::Cancelled), None);
+        assert_eq!(completed_mode(WindowMode::Prompt, AnimationOutcome::Completed), Some(WindowMode::Prompt));
+    }
+
+    #[test]
+    fn rapid_toggle_reserves_the_first_transition() {
+        assert_eq!(begin_toggle(WindowMode::Waiting), (WindowMode::Transitioning, Some(ToggleAction::Collapse)));
+        assert_eq!(begin_toggle(WindowMode::Transitioning), (WindowMode::Transitioning, None));
     }
 
     #[test]

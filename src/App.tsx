@@ -73,7 +73,7 @@ export default function App() {
   }, []);
 
   async function showAssistantPhase(phase: AssistantPhase) {
-    if (phase !== 'response') await syncNativePhase(phase);
+    await syncNativePhase(phase);
     setSurface('chat');
   }
 
