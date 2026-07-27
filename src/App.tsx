@@ -31,23 +31,42 @@ export default function App() {
   const [surface, setSurface] = useState<MainSurface>('floating');
   const [settingsForm, setSettingsForm] = useState<SettingsFormInput>(defaultSettingsForm);
   const [conversation, dispatch] = useReducer(conversationReducer, initialConversationState);
+  const conversationRef = useRef(conversation);
+  conversationRef.current = conversation;
   const expandedRequests = useRef(new Set<string>());
   const assistantPhase = deriveAssistantPhase(conversation);
+
+  async function syncNativePhase(phase: AssistantPhase) {
+    const reducedMotion = prefersReducedMotion();
+    if (phase === 'prompt') await commands.showPromptBar(reducedMotion);
+    else if (phase === 'waiting') await commands.showWaitingBall(reducedMotion);
+    else await commands.resizeResponsePanel(RESPONSE_MIN_HEIGHT, reducedMotion);
+  }
+
+  function stateAfter(action: Parameters<typeof conversationReducer>[1]) {
+    const next = conversationReducer(conversationRef.current, action);
+    conversationRef.current = next;
+    dispatch(action);
+    return next;
+  }
 
   useEffect(() => {
     const unlisten = Promise.all([
       events.onSurfaceChanged(setSurface),
       events.onChatDelta((payload) => {
-        dispatch({ type: 'delta', ...payload });
-        if (payload.content && !expandedRequests.current.has(payload.requestId)) {
-          expandedRequests.current.add(payload.requestId);
-          void commands.resizeResponsePanel(RESPONSE_MIN_HEIGHT, prefersReducedMotion());
-        }
+        const active = conversationRef.current.activeRequestId === payload.requestId;
+        stateAfter({ type: 'delta', ...payload });
+        if (active && payload.content) expandedRequests.current.add(payload.requestId);
       }),
-      events.onChatDone((payload) => dispatch({ type: 'done', ...payload })),
-      events.onChatError((payload) =>
-        dispatch({ type: 'error', requestId: payload.requestId, message: payload.message }),
-      ),
+      events.onChatDone((payload) => {
+        if (conversationRef.current.activeRequestId !== payload.requestId) return;
+        const next = stateAfter({ type: 'done', ...payload });
+        if (deriveAssistantPhase(next) === 'prompt') void syncNativePhase('prompt');
+      }),
+      events.onChatError((payload) => {
+        if (conversationRef.current.activeRequestId !== payload.requestId) return;
+        stateAfter({ type: 'error', requestId: payload.requestId, message: payload.message });
+      }),
     ]);
     return () => {
       void unlisten.then((listeners) => listeners.forEach((listener) => listener()));
@@ -55,43 +74,36 @@ export default function App() {
   }, []);
 
   async function showAssistantPhase(phase: AssistantPhase) {
-    const reducedMotion = prefersReducedMotion();
-    if (phase === 'prompt') await commands.showPromptBar(reducedMotion);
-    else if (phase === 'waiting') await commands.showWaitingBall(reducedMotion);
-    else await commands.resizeResponsePanel(RESPONSE_MIN_HEIGHT, reducedMotion);
+    if (phase !== 'response') await syncNativePhase(phase);
     setSurface('chat');
   }
 
   async function sendMessage(content: string) {
     const requestId = crypto.randomUUID();
     const providerMessages = [
-      ...buildProviderMessages(conversation.messages),
+      ...buildProviderMessages(conversationRef.current.messages),
       { role: 'user' as const, content },
     ];
 
-    dispatch({ type: 'send', requestId, content });
-    await commands.showWaitingBall(prefersReducedMotion());
+    stateAfter({ type: 'send', requestId, content });
     try {
+      await syncNativePhase('waiting');
       await commands.startChat(requestId, providerMessages);
     } catch (error) {
-      dispatch({
+      stateAfter({
         type: 'error',
         requestId,
         message: error instanceof Error ? error.message : String(error),
       });
-      await commands.resizeResponsePanel(RESPONSE_MIN_HEIGHT, prefersReducedMotion());
     }
     return requestId;
   }
 
   async function stopMessage(requestId: string) {
     await commands.stopChat(requestId);
-    dispatch({ type: 'stopped', requestId });
-    const hasContent = conversation.messages.some(
-      (message) => message.requestId === requestId && message.content.length > 0,
-    );
-    if (hasContent) await commands.resizeResponsePanel(RESPONSE_MIN_HEIGHT, prefersReducedMotion());
-    else await commands.showPromptBar(prefersReducedMotion());
+    if (conversationRef.current.activeRequestId !== requestId) return;
+    const next = stateAfter({ type: 'stopped', requestId });
+    if (deriveAssistantPhase(next) === 'prompt') await syncNativePhase('prompt');
   }
 
   async function openSettings() {
@@ -102,7 +114,7 @@ export default function App() {
   }
 
   async function returnToAssistant() {
-    await showAssistantPhase(assistantPhase);
+    await showAssistantPhase(deriveAssistantPhase(conversationRef.current));
   }
 
   if (surface === 'settings') {
@@ -126,12 +138,11 @@ export default function App() {
         onStop={stopMessage}
         onClear={() => {
           expandedRequests.current.clear();
-          dispatch({ type: 'clear' });
-          void commands.showPromptBar(prefersReducedMotion());
+          stateAfter({ type: 'clear' });
+          void syncNativePhase('prompt');
         }}
         onCollapse={() => {
-          void commands
-            .showFloatingBall(prefersReducedMotion())
+          void commands.showFloatingBall(prefersReducedMotion())
             .then(() => setSurface('floating'))
             .catch((error) => console.error('收起对话面板失败', error));
         }}
@@ -149,9 +160,7 @@ export default function App() {
     <FloatingBall
       isBusy={conversation.status === 'streaming'}
       onActivate={() => {
-        void showAssistantPhase(assistantPhase).catch((error) =>
-          console.error('打开助手表面失败', error),
-        );
+        void showAssistantPhase(assistantPhase).catch((error) => console.error('打开助手表面失败', error));
       }}
     />
   );

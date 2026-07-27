@@ -35,6 +35,10 @@ export function conversationReducer(
   state: ConversationState,
   action: ConversationAction,
 ): ConversationState {
+  if (action.type !== 'send' && action.type !== 'clear' && action.requestId !== state.activeRequestId) {
+    return state;
+  }
+
   switch (action.type) {
     case 'send':
       return {

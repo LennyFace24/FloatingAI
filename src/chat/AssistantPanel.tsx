@@ -22,6 +22,7 @@ export function AssistantPanel({
   onClear,
   onCollapse,
   onOpenSettings,
+  onContentHeight,
 }: AssistantPanelProps) {
   const [input, setInput] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -30,6 +31,7 @@ export function AssistantPanel({
 
   useEffect(() => {
     if (phase !== 'waiting') inputRef.current?.focus();
+    if (phase === 'response') onContentHeight(120);
   }, [phase]);
 
   useEffect(() => {

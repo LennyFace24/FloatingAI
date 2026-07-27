@@ -66,6 +66,20 @@ describe('conversationReducer', () => {
     expect(failed.messages).toHaveLength(2);
   });
 
+  it('ignores late events from an inactive request', () => {
+    const first = conversationReducer(initialConversationState, { type: 'send', requestId: 'req-1', content: 'first' });
+    const second = conversationReducer(first, { type: 'send', requestId: 'req-2', content: 'second' });
+
+    for (const action of [
+      { type: 'delta' as const, requestId: 'req-1', content: 'late' },
+      { type: 'done' as const, requestId: 'req-1' },
+      { type: 'stopped' as const, requestId: 'req-1' },
+      { type: 'error' as const, requestId: 'req-1', message: 'late error' },
+    ]) {
+      expect(conversationReducer(second, action)).toBe(second);
+    }
+  });
+
   it('builds provider messages without local metadata', () => {
     const state = conversationReducer(initialConversationState, {
       type: 'send',

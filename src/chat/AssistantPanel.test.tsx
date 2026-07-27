@@ -74,6 +74,12 @@ describe('AssistantPanel', () => {
     expect(screen.getByRole('button', { name: '停止' })).toHaveAttribute('title', '停止生成');
   });
 
+  it('reports a minimum content height for response layout', () => {
+    const onContentHeight = vi.fn();
+    render(<AssistantPanel conversation={{ status: 'error', error: 'failed', messages: [] }} {...callbacks} onContentHeight={onContentHeight} />);
+    expect(onContentHeight).toHaveBeenCalledWith(120);
+  });
+
   it('collapses on Escape', async () => {
     const user = userEvent.setup();
     const onCollapse = vi.fn();
