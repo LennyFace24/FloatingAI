@@ -28,22 +28,18 @@ const COLLAPSE_DURATION: Duration = Duration::from_millis(180);
 const FRAME_DURATION: Duration = Duration::from_millis(8);
 
 static ANIMATION_GENERATION: AtomicU64 = AtomicU64::new(0);
+static MOVE_PERSISTENCE_GENERATION: AtomicU64 = AtomicU64::new(0);
+const MOVE_PERSISTENCE_DELAY: Duration = Duration::from_millis(120);
+
+fn is_latest_move(move_generation: u64, current_generation: u64) -> bool {
+    move_generation == current_generation
+}
 
 fn drag_position(
     cursor: PhysicalPosition<i32>,
     offset: PhysicalPosition<i32>,
 ) -> PhysicalPosition<i32> {
     PhysicalPosition::new(cursor.x - offset.x, cursor.y - offset.y)
-}
-
-#[cfg_attr(not(test), allow(dead_code))]
-fn crossed_drag_threshold(
-    start: PhysicalPosition<i32>,
-    current: PhysicalPosition<i32>,
-) -> bool {
-    let delta_x = i64::from(current.x) - i64::from(start.x);
-    let delta_y = i64::from(current.y) - i64::from(start.y);
-    delta_x * delta_x + delta_y * delta_y >= 16
 }
 
 #[derive(Clone, Copy)]
@@ -343,22 +339,35 @@ pub fn attach_floating_position_persistence(app: &AppHandle) {
     let app_handle = app.clone();
     let window_for_read = window.clone();
     window.on_window_event(move |event| {
-        if matches!(event, tauri::WindowEvent::Moved(_)) {
-            if let Ok(size) = window_for_read.inner_size() {
-                if size.width > 100 {
-                    return;
-                }
-            }
-            if let Ok(position) = window_for_read.outer_position() {
-                if let Ok(mut stored) = settings::load_settings(&app_handle) {
-                    stored.floating_position = Some(settings::WindowPosition {
-                        x: position.x,
-                        y: position.y,
-                    });
-                    let _ = settings::save_settings(&app_handle, &stored);
-                }
-            }
+        let tauri::WindowEvent::Moved(position) = event else {
+            return;
+        };
+        if window_for_read
+            .inner_size()
+            .is_ok_and(|size| size.width > 100)
+        {
+            return;
         }
+
+        let generation = MOVE_PERSISTENCE_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
+        let position = *position;
+        let app_handle = app_handle.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(MOVE_PERSISTENCE_DELAY).await;
+            if !is_latest_move(
+                generation,
+                MOVE_PERSISTENCE_GENERATION.load(Ordering::SeqCst),
+            ) {
+                return;
+            }
+            if let Ok(mut stored) = settings::load_settings(&app_handle) {
+                stored.floating_position = Some(settings::WindowPosition {
+                    x: position.x,
+                    y: position.y,
+                });
+                let _ = settings::save_settings(&app_handle, &stored);
+            }
+        });
     });
 }
 
@@ -367,20 +376,17 @@ mod tests {
     use super::*;
 
     #[test]
+    fn drag_persistence_only_commits_latest_move() {
+        assert!(!is_latest_move(4, 5));
+        assert!(is_latest_move(5, 5));
+    }
+
+    #[test]
     fn drag_position_preserves_cursor_offset() {
         assert_eq!(
             drag_position(PhysicalPosition::new(125, 240), PhysicalPosition::new(25, 40)),
             PhysicalPosition::new(100, 200),
         );
-    }
-
-    #[test]
-    fn drag_threshold_uses_four_pixel_boundary() {
-        let start = PhysicalPosition::new(10, 10);
-        assert!(!crossed_drag_threshold(start, PhysicalPosition::new(13, 10)));
-        assert!(crossed_drag_threshold(start, PhysicalPosition::new(14, 10)));
-        assert!(!crossed_drag_threshold(start, PhysicalPosition::new(12, 13)));
-        assert!(crossed_drag_threshold(start, PhysicalPosition::new(14, 14)));
     }
 
     #[test]

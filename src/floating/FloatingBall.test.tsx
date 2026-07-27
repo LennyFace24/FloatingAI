@@ -2,8 +2,14 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FLOATING_BALL_SIZE, FLOATING_WINDOW_SIZE } from './floatingGeometry';
 
-const { startFloatingDrag } = vi.hoisted(() => ({
+const { startFloatingDrag, outerPosition, setPosition } = vi.hoisted(() => ({
   startFloatingDrag: vi.fn(() => Promise.resolve()),
+  outerPosition: vi.fn(),
+  setPosition: vi.fn(),
+}));
+
+vi.mock('@tauri-apps/api/window', () => ({
+  getCurrentWindow: () => ({ outerPosition, setPosition }),
 }));
 
 vi.mock('../bridge/commands', () => ({
@@ -15,6 +21,8 @@ import { FloatingBall } from './FloatingBall';
 describe('FloatingBall', () => {
   beforeEach(() => {
     startFloatingDrag.mockClear();
+    outerPosition.mockClear();
+    setPosition.mockClear();
   });
 
   it('activates only through the button click event', () => {
@@ -35,16 +43,21 @@ describe('FloatingBall', () => {
     render(<FloatingBall isBusy={false} onActivate={onActivate} />);
     const button = screen.getByRole('button', { name: '打开 AI 对话' });
 
+    const requestAnimationFrame = vi.spyOn(window, 'requestAnimationFrame');
     fireEvent.pointerDown(button, { clientX: 10, clientY: 10, pointerId: 1, button: 0 });
-    fireEvent.pointerMove(button, { clientX: 12, clientY: 12, pointerId: 1, buttons: 1 });
+    fireEvent.pointerMove(button, { clientX: 13, clientY: 10, pointerId: 1, buttons: 1 });
     expect(startFloatingDrag).not.toHaveBeenCalled();
 
-    fireEvent.pointerMove(button, { clientX: 20, clientY: 20, pointerId: 1, buttons: 1 });
+    fireEvent.pointerMove(button, { clientX: 14, clientY: 10, pointerId: 1, buttons: 1 });
     fireEvent.pointerMove(button, { clientX: 30, clientY: 30, pointerId: 1, buttons: 1 });
 
     expect(startFloatingDrag).toHaveBeenCalledOnce();
+    expect(outerPosition).not.toHaveBeenCalled();
+    expect(setPosition).not.toHaveBeenCalled();
+    expect(requestAnimationFrame).not.toHaveBeenCalled();
     fireEvent.click(button);
     expect(onActivate).not.toHaveBeenCalled();
+    requestAnimationFrame.mockRestore();
   });
 
   it('shows busy state without large text', () => {
