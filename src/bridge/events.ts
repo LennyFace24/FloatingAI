@@ -25,4 +25,6 @@ export const events = {
     listen<ChatErrorPayload>('chat://error', (event) => handler(event.payload)),
   onSurfaceChanged: (handler: (payload: SurfaceChangedPayload) => void): Promise<UnlistenFn> =>
     listen<SurfaceChangedPayload>('surface://changed', (event) => handler(event.payload)),
+  onSurfaceShowRequested: (handler: () => void): Promise<UnlistenFn> =>
+    listen('surface://show-requested', () => handler()),
 };

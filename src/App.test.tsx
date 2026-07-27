@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   doneHandler: undefined as undefined | ((payload: { requestId: string }) => void),
   errorHandler: undefined as undefined | ((payload: { requestId: string; message: string }) => void),
   surfaceHandler: undefined as undefined | ((surface: 'floating' | 'chat' | 'settings') => void),
+  showRequestedHandler: undefined as undefined | (() => void),
   getSettings: vi.fn(() => Promise.resolve({
     apiKeyConfigured: false,
     baseUrl: 'https://api.openai.com/v1',
@@ -47,6 +48,10 @@ vi.mock('./bridge/events', () => ({
   events: {
     onSurfaceChanged: (handler: typeof mocks.surfaceHandler) => {
       mocks.surfaceHandler = handler;
+      return Promise.resolve(() => undefined);
+    },
+    onSurfaceShowRequested: (handler: typeof mocks.showRequestedHandler) => {
+      mocks.showRequestedHandler = handler;
       return Promise.resolve(() => undefined);
     },
     onChatDelta: (handler: typeof mocks.deltaHandler) => {
@@ -88,12 +93,34 @@ describe('App assistant surface state flow', () => {
     mocks.doneHandler = undefined;
     mocks.errorHandler = undefined;
     mocks.surfaceHandler = undefined;
+    mocks.showRequestedHandler = undefined;
     mocks.showPromptBar.mockResolvedValue();
     mocks.showWaitingBall.mockResolvedValue();
     mocks.resizeResponsePanel.mockResolvedValue();
     mocks.showFloatingBall.mockResolvedValue();
     mocks.showSettingsPanel.mockResolvedValue();
     mocks.startChat.mockResolvedValue();
+  });
+
+  it('restores the derived waiting and response modes for native show requests', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openAssistant();
+    await user.type(screen.getByLabelText('输入问题'), 'restore me');
+    await user.click(screen.getByRole('button', { name: '发送' }));
+    const requestId = mocks.startChat.mock.calls[0][0];
+
+    act(() => mocks.surfaceHandler?.('floating'));
+    act(() => mocks.showRequestedHandler?.());
+    await waitFor(() => expect(mocks.showWaitingBall).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole('button', { name: '停止生成' })).toBeInTheDocument();
+
+    act(() => mocks.deltaHandler?.({ requestId, content: 'partial' }));
+    act(() => mocks.surfaceHandler?.('floating'));
+    const resizeCount = mocks.resizeResponsePanel.mock.calls.length;
+    act(() => mocks.showRequestedHandler?.());
+    await waitFor(() => expect(mocks.resizeResponsePanel).toHaveBeenCalledTimes(resizeCount + 1));
+    expect(await screen.findByRole('log')).toHaveTextContent('partial');
   });
 
   it('opens prompt, waits after send, and expands only on the first non-empty delta', async () => {

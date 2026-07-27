@@ -51,6 +51,9 @@ export default function App() {
   useEffect(() => {
     const unlisten = Promise.all([
       events.onSurfaceChanged(setSurface),
+      events.onSurfaceShowRequested(() => {
+        void showAssistantPhase(deriveAssistantPhase(conversationRef.current));
+      }),
       events.onChatDelta((payload) => {
         dispatchConversation({ type: 'delta', ...payload });
       }),

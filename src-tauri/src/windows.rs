@@ -188,30 +188,59 @@ fn cancel_window_animation() {
     ANIMATION_GENERATION.fetch_add(1, Ordering::SeqCst);
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum AnimationPlan {
-    Direct,
+enum TransitionPlan {
+    Direct([WindowBounds; 1]),
     Interpolated,
 }
 
-fn animation_plan(reduced_motion: bool) -> AnimationPlan {
+fn transition_plan(reduced_motion: bool, target: WindowBounds) -> TransitionPlan {
     if reduced_motion {
-        AnimationPlan::Direct
+        TransitionPlan::Direct([target])
     } else {
-        AnimationPlan::Interpolated
+        TransitionPlan::Interpolated
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ChatPanelRequest {
-    Prompt,
+#[repr(u8)]
+enum WindowMode {
     Floating,
+    Prompt,
+    Waiting,
+    Response,
+    Settings,
+    Hidden,
 }
 
-fn chat_panel_request(is_expanded: bool) -> ChatPanelRequest {
-    if is_expanded {
-        ChatPanelRequest::Floating
-    } else {
-        ChatPanelRequest::Prompt
+static WINDOW_MODE: AtomicU64 = AtomicU64::new(WindowMode::Floating as u64);
+
+fn current_window_mode() -> WindowMode {
+    match WINDOW_MODE.load(Ordering::SeqCst) {
+        value if value == WindowMode::Prompt as u64 => WindowMode::Prompt,
+        value if value == WindowMode::Waiting as u64 => WindowMode::Waiting,
+        value if value == WindowMode::Response as u64 => WindowMode::Response,
+        value if value == WindowMode::Settings as u64 => WindowMode::Settings,
+        value if value == WindowMode::Hidden as u64 => WindowMode::Hidden,
+        _ => WindowMode::Floating,
+    }
+}
+
+fn set_window_mode(mode: WindowMode) {
+    WINDOW_MODE.store(mode as u64, Ordering::SeqCst);
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ToggleAction {
+    Collapse,
+    RequestShow,
+}
+
+fn toggle_action(mode: WindowMode) -> ToggleAction {
+    match mode {
+        WindowMode::Floating | WindowMode::Hidden => ToggleAction::RequestShow,
+        WindowMode::Prompt | WindowMode::Waiting | WindowMode::Response | WindowMode::Settings => {
+            ToggleAction::Collapse
+        }
     }
 }
 
@@ -224,8 +253,8 @@ async fn animate_window_bounds(
     let generation = ANIMATION_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
     let start = current_bounds(window)?;
 
-    if animation_plan(reduced_motion) == AnimationPlan::Direct {
-        set_window_bounds(window, target)?;
+    if let TransitionPlan::Direct([exact_target]) = transition_plan(reduced_motion, target) {
+        set_window_bounds(window, exact_target)?;
         return Ok(AnimationOutcome::Completed);
     }
 
@@ -315,10 +344,14 @@ pub async fn start_floating_drag(app: &AppHandle) -> Result<(), String> {
     }
 }
 pub async fn show_prompt_bar(app: &AppHandle, reduced_motion: bool) -> tauri::Result<()> {
-    show_bottom_anchored(app, |geometry| geometry.prompt_bounds(), reduced_motion).await
+    show_bottom_anchored(app, |geometry| geometry.prompt_bounds(), reduced_motion).await?;
+    set_window_mode(WindowMode::Prompt);
+    Ok(())
 }
 pub async fn show_waiting_ball(app: &AppHandle, reduced_motion: bool) -> tauri::Result<()> {
-    show_bottom_anchored(app, |geometry| geometry.waiting_bounds(), reduced_motion).await
+    show_bottom_anchored(app, |geometry| geometry.waiting_bounds(), reduced_motion).await?;
+    set_window_mode(WindowMode::Waiting);
+    Ok(())
 }
 pub async fn resize_response_panel(
     app: &AppHandle,
@@ -330,6 +363,7 @@ pub async fn resize_response_panel(
     };
     let target = surface_geometry(&window)?.response_bounds(content_height);
     let _ = animate_window_bounds(&window, target, EXPAND_DURATION, reduced_motion).await?;
+    set_window_mode(WindowMode::Response);
     Ok(())
 }
 async fn show_bottom_anchored<F: FnOnce(SurfaceGeometry) -> WindowBounds>(
@@ -374,6 +408,7 @@ pub async fn show_floating_ball(app: &AppHandle, reduced_motion: bool) -> tauri:
     window.set_always_on_top(always_on_top)?;
     window.show()?;
     window.set_focus()?;
+    set_window_mode(WindowMode::Floating);
     Ok(())
 }
 
@@ -387,6 +422,7 @@ pub fn show_settings_panel(app: &AppHandle) -> tauri::Result<()> {
     window.emit("surface://changed", "settings")?;
     window.show()?;
     window.set_focus()?;
+    set_window_mode(WindowMode::Settings);
     Ok(())
 }
 
@@ -395,14 +431,12 @@ pub fn hide_all_windows(app: &AppHandle) -> tauri::Result<()> {
     if let Some(window) = app.get_webview_window(FLOATING_LABEL) {
         window.hide()?;
     }
+    set_window_mode(WindowMode::Hidden);
     Ok(())
 }
 
 pub fn request_show_chat_panel(app: &AppHandle) {
-    let app = app.clone();
-    tauri::async_runtime::spawn(async move {
-        let _ = show_prompt_bar(&app, false).await;
-    });
+    let _ = app.emit("surface://show-requested", ());
 }
 
 pub fn request_show_floating_ball(app: &AppHandle) {
@@ -413,21 +447,10 @@ pub fn request_show_floating_ball(app: &AppHandle) {
 }
 
 pub fn request_toggle_chat_panel(app: &AppHandle) {
-    let app = app.clone();
-    tauri::async_runtime::spawn(async move {
-        let is_expanded = app
-            .get_webview_window(FLOATING_LABEL)
-            .and_then(|window| window.inner_size().ok())
-            .is_some_and(|size| size.width > 100);
-        match chat_panel_request(is_expanded) {
-            ChatPanelRequest::Floating => {
-                let _ = show_floating_ball(&app, false).await;
-            }
-            ChatPanelRequest::Prompt => {
-                let _ = show_prompt_bar(&app, false).await;
-            }
-        }
-    });
+    match toggle_action(current_window_mode()) {
+        ToggleAction::Collapse => request_show_floating_ball(app),
+        ToggleAction::RequestShow => request_show_chat_panel(app),
+    }
 }
 
 pub fn restore_floating_position(app: &AppHandle) {
@@ -486,15 +509,26 @@ mod tests {
     use super::*;
 
     #[test]
-    fn reduced_motion_uses_one_direct_target_commit() {
-        assert_eq!(animation_plan(true), AnimationPlan::Direct);
-        assert_eq!(animation_plan(false), AnimationPlan::Interpolated);
+    fn reduced_motion_commits_the_exact_target_once() {
+        let target = WindowBounds {
+            position: PhysicalPosition::new(120, 340),
+            size: PhysicalSize::new(640, 280),
+        };
+        assert_eq!(transition_plan(true, target), TransitionPlan::Direct([target]));
+        let TransitionPlan::Direct(commits) = transition_plan(true, target) else { unreachable!() };
+        assert_eq!(commits, [target]);
+        assert_eq!(commits.len(), 1);
+        assert_eq!(transition_plan(false, target), TransitionPlan::Interpolated);
     }
 
     #[test]
-    fn tray_and_shortcut_compatibility_select_prompt_mode() {
-        assert_eq!(chat_panel_request(false), ChatPanelRequest::Prompt);
-        assert_eq!(chat_panel_request(true), ChatPanelRequest::Floating);
+    fn toggle_treats_waiting_and_every_visible_surface_as_expanded() {
+        for mode in [WindowMode::Prompt, WindowMode::Waiting, WindowMode::Response, WindowMode::Settings] {
+            assert_eq!(toggle_action(mode), ToggleAction::Collapse);
+        }
+        for mode in [WindowMode::Floating, WindowMode::Hidden] {
+            assert_eq!(toggle_action(mode), ToggleAction::RequestShow);
+        }
     }
 
     #[test]
