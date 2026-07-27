@@ -27,7 +27,6 @@ export function AssistantPanel({
 }: AssistantPanelProps) {
   const [input, setInput] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const responseRef = useRef<HTMLElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
   const isPinnedToBottomRef = useRef(true);
   const phase = deriveAssistantPhase(conversation);
@@ -35,7 +34,11 @@ export function AssistantPanel({
   const contentKey = `${conversation.status}:${conversation.error ?? ''}:${conversation.messages
     .map((message) => `${message.id}:${message.content}:${message.finishReason ?? ''}`)
     .join('|')}`;
-  useResponseHeight({ containerRef: responseRef, contentKey, onHeight: onContentHeight });
+  const responseRef = useResponseHeight({
+    contentKey,
+    measurementSessionKey: phase === 'response' ? `response:${conversation.activeRequestId ?? 'idle'}` : phase,
+    onHeight: onContentHeight,
+  });
 
   useEffect(() => {
     if (isPinnedToBottomRef.current && messageListRef.current) {
@@ -143,6 +146,7 @@ export function AssistantPanel({
         <div
           ref={messageListRef}
           className="message-list"
+          data-response-scroll
           role="log"
           aria-live="polite"
           onScroll={(event) => {

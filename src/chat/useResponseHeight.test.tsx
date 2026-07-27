@@ -1,5 +1,4 @@
 import { act, render, screen } from '@testing-library/react';
-import { useRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isPinnedToBottom, useResponseHeight } from './useResponseHeight';
 
@@ -17,16 +16,27 @@ class ResizeObserverStub {
   disconnect = disconnect;
 }
 
-function Harness({ contentKey, onHeight }: { contentKey: string; onHeight: (height: number) => void }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  useResponseHeight({ containerRef, contentKey, onHeight });
-  return (
+function Harness({
+  contentKey,
+  measurementSessionKey = 'response-1',
+  onHeight,
+  visible = true,
+}: {
+  contentKey: string;
+  measurementSessionKey?: string;
+  onHeight: (height: number) => void;
+  visible?: boolean;
+}) {
+  const containerRef = useResponseHeight({ contentKey, measurementSessionKey, onHeight });
+  return visible ? (
     <div ref={containerRef} data-testid="container">
       <header data-response-header />
-      <div data-response-content />
+      <div data-response-scroll>
+        <div data-response-content />
+      </div>
       <form data-response-composer />
     </div>
-  );
+  ) : null;
 }
 
 function setMeasuredHeight(element: Element, height: number) {
@@ -34,9 +44,13 @@ function setMeasuredHeight(element: Element, height: number) {
 }
 
 function flushFrame() {
-  const pending = frames;
-  frames = [];
-  act(() => pending.forEach((callback) => callback(0)));
+  act(() => {
+    while (frames.length > 0) {
+      const pending = frames;
+      frames = [];
+      pending.forEach((callback) => callback(0));
+    }
+  });
 }
 
 describe('isPinnedToBottom', () => {
@@ -97,6 +111,44 @@ describe('useResponseHeight', () => {
     resizeCallback([], {} as ResizeObserver);
     flushFrame();
     expect(onHeight).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-emits an equal height when a new response measurement session starts', () => {
+    const onHeight = vi.fn();
+    const { rerender } = render(<Harness contentKey="same" measurementSessionKey="response-1" onHeight={onHeight} />);
+    flushFrame();
+    expect(onHeight).toHaveBeenCalledTimes(1);
+
+    rerender(<Harness contentKey="same" measurementSessionKey="response-2" onHeight={onHeight} />);
+    flushFrame();
+    expect(onHeight).toHaveBeenCalledTimes(2);
+  });
+
+  it('starts observing when the container changes from null to a response node', () => {
+    const onHeight = vi.fn();
+    const { rerender } = render(<Harness contentKey="waiting" onHeight={onHeight} visible={false} />);
+    expect(observe).not.toHaveBeenCalled();
+
+    rerender(<Harness contentKey="response" onHeight={onHeight} />);
+    expect(observe).toHaveBeenCalledWith(screen.getByTestId('container').querySelector('[data-response-content]'));
+  });
+
+  it('includes scroll padding and surface borders in the target height', () => {
+    const onHeight = vi.fn();
+    render(<Harness contentKey="a" onHeight={onHeight} />);
+    const container = screen.getByTestId('container');
+    setMeasuredHeight(container.querySelector('[data-response-header]')!, 48);
+    setMeasuredHeight(container.querySelector('[data-response-content]')!, 80);
+    setMeasuredHeight(container.querySelector('[data-response-composer]')!, 58);
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((element) => ({
+      paddingTop: element.hasAttribute('data-response-scroll') ? '16px' : '0px',
+      paddingBottom: element.hasAttribute('data-response-scroll') ? '16px' : '0px',
+      borderTopWidth: element === container ? '1px' : '0px',
+      borderBottomWidth: element === container ? '1px' : '0px',
+    } as CSSStyleDeclaration));
+
+    flushFrame();
+    expect(onHeight).toHaveBeenCalledWith(220);
   });
 
   it('disconnects and cancels a pending frame on unmount', () => {
