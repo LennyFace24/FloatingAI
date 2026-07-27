@@ -14,6 +14,31 @@ async fn start_floating_drag(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn show_prompt_bar(app: tauri::AppHandle, reduced_motion: bool) -> Result<(), String> {
+    windows::show_prompt_bar(&app, reduced_motion)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn show_waiting_ball(app: tauri::AppHandle, reduced_motion: bool) -> Result<(), String> {
+    windows::show_waiting_ball(&app, reduced_motion)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn resize_response_panel(
+    app: tauri::AppHandle,
+    content_height: f64,
+    reduced_motion: bool,
+) -> Result<(), String> {
+    windows::resize_response_panel(&app, content_height, reduced_motion)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 async fn show_chat_panel(app: tauri::AppHandle, reduced_motion: bool) -> Result<(), String> {
     windows::show_chat_panel(&app, reduced_motion)
         .await
@@ -100,6 +125,9 @@ pub fn run() {
         .manage(Arc::new(ai::ChatRuntime::default()))
         .invoke_handler(tauri::generate_handler![
             start_floating_drag,
+            show_prompt_bar,
+            show_waiting_ball,
+            resize_response_panel,
             show_chat_panel,
             show_floating_ball,
             show_settings_panel,

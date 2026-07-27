@@ -19,8 +19,12 @@ use windows_sys::Win32::{
 pub const FLOATING_LABEL: &str = "floating";
 
 const FLOATING_SIZE: f64 = 50.0;
-const CHAT_WIDTH: f64 = 480.0;
-const CHAT_HEIGHT: f64 = 620.0;
+const SURFACE_WIDTH: f64 = 640.0;
+const PROMPT_HEIGHT: f64 = 58.0;
+const WAITING_SIZE: f64 = 50.0;
+const RESPONSE_MIN_HEIGHT: f64 = 120.0;
+const RESPONSE_MAX_HEIGHT: f64 = 560.0;
+const BOTTOM_GAP: f64 = 72.0;
 const SETTINGS_WIDTH: f64 = 460.0;
 const SETTINGS_HEIGHT: f64 = 560.0;
 const EXPAND_DURATION: Duration = Duration::from_millis(280);
@@ -42,7 +46,7 @@ fn drag_position(
     PhysicalPosition::new(cursor.x - offset.x, cursor.y - offset.y)
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct WindowBounds {
     position: PhysicalPosition<i32>,
     size: PhysicalSize<u32>,
@@ -55,33 +59,56 @@ fn current_bounds(window: &WebviewWindow) -> tauri::Result<WindowBounds> {
     })
 }
 
-fn expanded_bounds(window: &WebviewWindow) -> tauri::Result<WindowBounds> {
-    let current = current_bounds(window)?;
-    let Some(monitor) = window.current_monitor()? else {
-        return Ok(WindowBounds {
-            position: current.position,
-            size: PhysicalSize::new(CHAT_WIDTH as u32, CHAT_HEIGHT as u32),
-        });
-    };
-    let scale = monitor.scale_factor();
-    let size = PhysicalSize::new((CHAT_WIDTH * scale) as u32, (CHAT_HEIGHT * scale) as u32);
-    let monitor_position = monitor.position();
-    let monitor_size = monitor.size();
-    let right = monitor_position.x + monitor_size.width as i32;
-    let bottom = monitor_position.y + monitor_size.height as i32;
-    let position = PhysicalPosition::new(
-        current
-            .position
-            .x
-            .min(right - size.width as i32)
-            .max(monitor_position.x),
-        current
-            .position
-            .y
-            .min(bottom - size.height as i32)
-            .max(monitor_position.y),
-    );
-    Ok(WindowBounds { position, size })
+#[derive(Clone, Copy)]
+struct SurfaceGeometry {
+    work_area_position: PhysicalPosition<i32>,
+    work_area_size: PhysicalSize<u32>,
+    scale_factor: f64,
+}
+
+impl SurfaceGeometry {
+    fn bottom_anchored_bounds(self, logical_width: f64, logical_height: f64) -> WindowBounds {
+        let requested_width = (logical_width * self.scale_factor).round() as u32;
+        let width = requested_width.min(self.work_area_size.width);
+        let height = (logical_height * self.scale_factor).round() as u32;
+        let bottom_gap = (BOTTOM_GAP * self.scale_factor).round() as i32;
+        let position = PhysicalPosition::new(
+            self.work_area_position.x + (self.work_area_size.width - width) as i32 / 2,
+            self.work_area_position.y + self.work_area_size.height as i32 - bottom_gap
+                - height as i32,
+        );
+        WindowBounds {
+            position,
+            size: PhysicalSize::new(width, height),
+        }
+    }
+
+    fn prompt_bounds(self) -> WindowBounds {
+        self.bottom_anchored_bounds(SURFACE_WIDTH, PROMPT_HEIGHT)
+    }
+
+    fn waiting_bounds(self) -> WindowBounds {
+        self.bottom_anchored_bounds(WAITING_SIZE, WAITING_SIZE)
+    }
+
+    fn response_bounds(self, content_height: f64) -> WindowBounds {
+        self.bottom_anchored_bounds(
+            SURFACE_WIDTH,
+            content_height.clamp(RESPONSE_MIN_HEIGHT, RESPONSE_MAX_HEIGHT),
+        )
+    }
+}
+
+fn surface_geometry(window: &WebviewWindow) -> tauri::Result<SurfaceGeometry> {
+    let monitor = window
+        .current_monitor()?
+        .ok_or(tauri::Error::WindowNotFound)?;
+    let work_area = monitor.work_area();
+    Ok(SurfaceGeometry {
+        work_area_position: work_area.position,
+        work_area_size: work_area.size,
+        scale_factor: monitor.scale_factor(),
+    })
 }
 
 fn logical_size(
@@ -236,18 +263,42 @@ pub async fn start_floating_drag(app: &AppHandle) -> Result<(), String> {
     }
 }
 
-pub async fn show_chat_panel(app: &AppHandle, reduced_motion: bool) -> tauri::Result<()> {
+pub async fn show_prompt_bar(app: &AppHandle, reduced_motion: bool) -> tauri::Result<()> {
+    show_bottom_anchored(app, "prompt", |geometry| geometry.prompt_bounds(), reduced_motion).await
+}
+
+pub async fn show_waiting_ball(app: &AppHandle, reduced_motion: bool) -> tauri::Result<()> {
+    show_bottom_anchored(app, "waiting", |geometry| geometry.waiting_bounds(), reduced_motion).await
+}
+
+pub async fn resize_response_panel(
+    app: &AppHandle,
+    content_height: f64,
+    reduced_motion: bool,
+) -> tauri::Result<()> {
+    show_bottom_anchored(app, "response", |geometry| geometry.response_bounds(content_height), reduced_motion).await
+}
+
+async fn show_bottom_anchored<F: FnOnce(SurfaceGeometry) -> WindowBounds>(
+    app: &AppHandle,
+    surface: &str,
+    bounds: F,
+    reduced_motion: bool,
+) -> tauri::Result<()> {
     let Some(window) = app.get_webview_window(FLOATING_LABEL) else {
         return Err(tauri::Error::WindowNotFound);
     };
-    let target = expanded_bounds(&window)?;
+    let target = bounds(surface_geometry(&window)?);
     window.set_resizable(false)?;
-    window.emit("surface://changed", "chat")?;
+    window.emit("surface://changed", surface)?;
     window.show()?;
     animate_window_bounds(&window, target, EXPAND_DURATION, reduced_motion).await?;
-    window.set_resizable(true)?;
     window.set_focus()?;
     Ok(())
+}
+
+pub async fn show_chat_panel(app: &AppHandle, reduced_motion: bool) -> tauri::Result<()> {
+    show_bottom_anchored(app, "chat", |geometry| geometry.prompt_bounds(), reduced_motion).await
 }
 
 pub async fn show_floating_ball(app: &AppHandle, reduced_motion: bool) -> tauri::Result<()> {
@@ -256,10 +307,7 @@ pub async fn show_floating_ball(app: &AppHandle, reduced_motion: bool) -> tauri:
     };
     let current = current_bounds(&window)?;
     let size = logical_size(&window, FLOATING_SIZE, FLOATING_SIZE)?;
-    let target = WindowBounds {
-        position: current.position,
-        size,
-    };
+    let target = WindowBounds { position: current.position, size };
     window.set_resizable(false)?;
     animate_window_bounds(&window, target, COLLAPSE_DURATION, reduced_motion).await?;
     window.emit("surface://changed", "floating")?;
@@ -405,5 +453,75 @@ mod tests {
     fn interpolation_reaches_target() {
         assert_eq!(interpolate_i32(10, 100, 1.0), 100);
         assert_eq!(interpolate_u32(50, 480, 1.0), 480);
+    }
+    fn geometry(scale_factor: f64) -> SurfaceGeometry {
+        SurfaceGeometry {
+            work_area_position: PhysicalPosition::new(100, 50),
+            work_area_size: PhysicalSize::new(1920, 1080),
+            scale_factor,
+        }
+    }
+
+    #[test]
+    fn bottom_anchored_prompt_at_1x() {
+        let bounds = geometry(1.0).prompt_bounds();
+        assert_eq!(bounds.position, PhysicalPosition::new(740, 1000));
+        assert_eq!(bounds.size, PhysicalSize::new(640, 58));
+    }
+
+    #[test]
+    fn bottom_anchored_modes_at_1_5x() {
+        let geometry = geometry(1.5);
+        assert_eq!(
+            geometry.prompt_bounds(),
+            WindowBounds {
+                position: PhysicalPosition::new(580, 935),
+                size: PhysicalSize::new(960, 87),
+            }
+        );
+        assert_eq!(
+            geometry.waiting_bounds(),
+            WindowBounds {
+                position: PhysicalPosition::new(1022, 947),
+                size: PhysicalSize::new(75, 75),
+            }
+        );
+    }
+
+    #[test]
+    fn bottom_anchored_response_clamps_minimum_height() {
+        let bounds = geometry(1.0).response_bounds(40.0);
+        assert_eq!(bounds.position, PhysicalPosition::new(740, 938));
+        assert_eq!(bounds.size, PhysicalSize::new(640, 120));
+    }
+
+    #[test]
+    fn bottom_anchored_response_clamps_maximum_and_keeps_bottom_fixed() {
+        let geometry = geometry(1.0);
+        let minimum = geometry.response_bounds(120.0);
+        let maximum = geometry.response_bounds(700.0);
+        assert_eq!(maximum.position, PhysicalPosition::new(740, 498));
+        assert_eq!(maximum.size, PhysicalSize::new(640, 560));
+        assert_eq!(minimum.position.y + minimum.size.height as i32, 1058);
+        assert_eq!(maximum.position.y + maximum.size.height as i32, 1058);
+    }
+
+    #[test]
+    fn bottom_anchored_response_scales_requested_height() {
+        let bounds = geometry(1.5).response_bounds(200.0);
+        assert_eq!(bounds.position, PhysicalPosition::new(580, 722));
+        assert_eq!(bounds.size, PhysicalSize::new(960, 300));
+    }
+
+    #[test]
+    fn bottom_anchored_width_is_limited_to_small_work_area() {
+        let geometry = SurfaceGeometry {
+            work_area_position: PhysicalPosition::new(-900, 20),
+            work_area_size: PhysicalSize::new(600, 800),
+            scale_factor: 1.0,
+        };
+        let bounds = geometry.prompt_bounds();
+        assert_eq!(bounds.position.x, -900);
+        assert_eq!(bounds.size.width, 600);
     }
 }
