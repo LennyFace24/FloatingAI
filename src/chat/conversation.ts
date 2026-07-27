@@ -60,6 +60,14 @@ export function conversationReducer(
         ),
       };
     case 'done':
+      if (!state.messages.some((message) => message.requestId === action.requestId && message.content)) {
+        return {
+          status: 'idle',
+          messages: state.messages.filter(
+            (message) => message.id !== `user-${action.requestId}` && message.requestId !== action.requestId,
+          ),
+        };
+      }
       return {
         ...state,
         status: 'idle',
@@ -69,6 +77,14 @@ export function conversationReducer(
         ),
       };
     case 'stopped':
+      if (!state.messages.some((message) => message.requestId === action.requestId && message.content)) {
+        return {
+          status: 'idle',
+          messages: state.messages.filter(
+            (message) => message.id !== `user-${action.requestId}` && message.requestId !== action.requestId,
+          ),
+        };
+      }
       return {
         ...state,
         status: 'idle',

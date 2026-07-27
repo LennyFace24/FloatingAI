@@ -31,6 +31,15 @@ describe('conversationReducer', () => {
     expect(state.messages[1].content).toBe('world');
   });
 
+  it('removes a hidden round when done or stopped before the first token', () => {
+    for (const type of ['done', 'stopped'] as const) {
+      const streaming = conversationReducer(initialConversationState, { type: 'send', requestId: 'req-empty', content: 'hidden' });
+      const finished = conversationReducer(streaming, { type, requestId: 'req-empty' });
+      expect(finished).toEqual(initialConversationState);
+      expect(buildProviderMessages(finished.messages)).toEqual([]);
+    }
+  });
+
   it('marks stopped generation without losing partial content', () => {
     const streaming = conversationReducer(initialConversationState, {
       type: 'send',

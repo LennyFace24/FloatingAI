@@ -119,13 +119,34 @@ describe('App assistant surface state flow', () => {
     expect(mocks.showPromptBar).toHaveBeenCalledOnce();
     act(() => mocks.doneHandler?.({ requestId }));
     await waitFor(() => expect(mocks.showPromptBar).toHaveBeenCalledTimes(2));
-
-    await user.type(screen.getByLabelText('输入问题'), 'second');
+    await user.type(screen.getByLabelText('输入问题'), 'after done');
     await user.click(screen.getByRole('button', { name: '发送' }));
+    expect(mocks.startChat.mock.calls[1][1]).toEqual([{ role: 'user', content: 'after done' }]);
+
     const secondId = mocks.startChat.mock.calls[1][0];
     act(() => mocks.errorHandler?.({ requestId: secondId, message: 'failed' }));
     await waitFor(() => expect(mocks.resizeResponsePanel).toHaveBeenCalledOnce());
     expect(await screen.findByRole('alert')).toHaveTextContent('failed');
+  });
+
+  it('keeps response shape for done and error after content', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await openAssistant();
+    await user.type(screen.getByLabelText('输入问题'), 'done content');
+    await user.click(screen.getByRole('button', { name: '发送' }));
+    const doneId = mocks.startChat.mock.calls[0][0];
+    act(() => mocks.deltaHandler?.({ requestId: doneId, content: 'answer' }));
+    act(() => mocks.doneHandler?.({ requestId: doneId }));
+    expect(await screen.findByRole('log')).toHaveTextContent('answer');
+
+    await user.type(screen.getByLabelText('输入问题'), 'error content');
+    await user.click(screen.getByRole('button', { name: '发送' }));
+    const errorId = mocks.startChat.mock.calls[1][0];
+    act(() => mocks.deltaHandler?.({ requestId: errorId, content: 'partial' }));
+    act(() => mocks.errorHandler?.({ requestId: errorId, message: 'failed later' }));
+    expect(await screen.findByRole('log')).toHaveTextContent('partial');
+    expect(screen.getByRole('alert')).toHaveTextContent('failed later');
   });
 
   it('uses the latest delta when stop resolves and ignores stale deltas', async () => {

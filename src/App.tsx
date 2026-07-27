@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { commands, type AppSettings } from './bridge/commands';
 import { events } from './bridge/events';
 import { AssistantPanel } from './chat/AssistantPanel';
@@ -30,10 +30,8 @@ function settingsFormFromPublic(settings: AppSettings) {
 export default function App() {
   const [surface, setSurface] = useState<MainSurface>('floating');
   const [settingsForm, setSettingsForm] = useState<SettingsFormInput>(defaultSettingsForm);
-  const [conversation, dispatch] = useReducer(conversationReducer, initialConversationState);
-  const conversationRef = useRef(conversation);
-  conversationRef.current = conversation;
-  const expandedRequests = useRef(new Set<string>());
+  const conversationRef = useRef(initialConversationState);
+  const [conversation, setConversation] = useState(initialConversationState);
   const assistantPhase = deriveAssistantPhase(conversation);
 
   async function syncNativePhase(phase: AssistantPhase) {
@@ -43,10 +41,10 @@ export default function App() {
     else await commands.resizeResponsePanel(RESPONSE_MIN_HEIGHT, reducedMotion);
   }
 
-  function stateAfter(action: Parameters<typeof conversationReducer>[1]) {
+  function dispatchConversation(action: Parameters<typeof conversationReducer>[1]) {
     const next = conversationReducer(conversationRef.current, action);
     conversationRef.current = next;
-    dispatch(action);
+    setConversation(next);
     return next;
   }
 
@@ -54,18 +52,16 @@ export default function App() {
     const unlisten = Promise.all([
       events.onSurfaceChanged(setSurface),
       events.onChatDelta((payload) => {
-        const active = conversationRef.current.activeRequestId === payload.requestId;
-        stateAfter({ type: 'delta', ...payload });
-        if (active && payload.content) expandedRequests.current.add(payload.requestId);
+        dispatchConversation({ type: 'delta', ...payload });
       }),
       events.onChatDone((payload) => {
         if (conversationRef.current.activeRequestId !== payload.requestId) return;
-        const next = stateAfter({ type: 'done', ...payload });
+        const next = dispatchConversation({ type: 'done', ...payload });
         if (deriveAssistantPhase(next) === 'prompt') void syncNativePhase('prompt');
       }),
       events.onChatError((payload) => {
         if (conversationRef.current.activeRequestId !== payload.requestId) return;
-        stateAfter({ type: 'error', requestId: payload.requestId, message: payload.message });
+        dispatchConversation({ type: 'error', requestId: payload.requestId, message: payload.message });
       }),
     ]);
     return () => {
@@ -85,12 +81,12 @@ export default function App() {
       { role: 'user' as const, content },
     ];
 
-    stateAfter({ type: 'send', requestId, content });
+    dispatchConversation({ type: 'send', requestId, content });
     try {
       await syncNativePhase('waiting');
       await commands.startChat(requestId, providerMessages);
     } catch (error) {
-      stateAfter({
+      dispatchConversation({
         type: 'error',
         requestId,
         message: error instanceof Error ? error.message : String(error),
@@ -102,7 +98,7 @@ export default function App() {
   async function stopMessage(requestId: string) {
     await commands.stopChat(requestId);
     if (conversationRef.current.activeRequestId !== requestId) return;
-    const next = stateAfter({ type: 'stopped', requestId });
+    const next = dispatchConversation({ type: 'stopped', requestId });
     if (deriveAssistantPhase(next) === 'prompt') await syncNativePhase('prompt');
   }
 
@@ -137,8 +133,7 @@ export default function App() {
         onSend={sendMessage}
         onStop={stopMessage}
         onClear={() => {
-          expandedRequests.current.clear();
-          stateAfter({ type: 'clear' });
+          dispatchConversation({ type: 'clear' });
           void syncNativePhase('prompt');
         }}
         onCollapse={() => {
