@@ -7,6 +7,13 @@ mod tray;
 mod windows;
 
 #[tauri::command]
+async fn start_floating_drag(app: tauri::AppHandle) -> Result<(), String> {
+    windows::start_floating_drag(&app)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 async fn show_chat_panel(app: tauri::AppHandle, reduced_motion: bool) -> Result<(), String> {
     windows::show_chat_panel(&app, reduced_motion)
         .await
@@ -92,6 +99,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(Arc::new(ai::ChatRuntime::default()))
         .invoke_handler(tauri::generate_handler![
+            start_floating_drag,
             show_chat_panel,
             show_floating_ball,
             show_settings_panel,

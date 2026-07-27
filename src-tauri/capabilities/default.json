@@ -9,8 +9,6 @@
   ],
   "permissions": [
     "core:default",
-    "core:window:allow-outer-position",
-    "core:window:allow-set-position",
     "opener:default",
     "store:default"
   ]

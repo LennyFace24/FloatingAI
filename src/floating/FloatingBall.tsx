@@ -1,6 +1,5 @@
 import { useRef } from 'react';
-import { PhysicalPosition } from '@tauri-apps/api/dpi';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { commands } from '../bridge/commands';
 import { FLOATING_BALL_SIZE } from './floatingGeometry';
 
 interface FloatingBallProps {
@@ -10,10 +9,8 @@ interface FloatingBallProps {
 
 interface PointerStart {
   pointerId: number;
-  screenX: number;
-  screenY: number;
-  windowX: number;
-  windowY: number;
+  clientX: number;
+  clientY: number;
 }
 
 const DRAG_THRESHOLD_PX = 4;
@@ -21,20 +18,6 @@ const DRAG_THRESHOLD_PX = 4;
 export function FloatingBall({ isBusy, onActivate }: FloatingBallProps) {
   const pointerStart = useRef<PointerStart | null>(null);
   const suppressClick = useRef(false);
-  const pendingPosition = useRef<PhysicalPosition | null>(null);
-  const frameId = useRef<number | null>(null);
-  const appWindow = getCurrentWindow();
-
-  function schedulePosition(position: PhysicalPosition) {
-    pendingPosition.current = position;
-    if (frameId.current !== null) return;
-    frameId.current = window.requestAnimationFrame(() => {
-      frameId.current = null;
-      const next = pendingPosition.current;
-      pendingPosition.current = null;
-      if (next) void appWindow.setPosition(next).catch((error) => console.error('移动悬浮球失败', error));
-    });
-  }
 
   return (
     <button
@@ -53,25 +36,21 @@ export function FloatingBall({ isBusy, onActivate }: FloatingBallProps) {
         if (event.button !== 0) return;
         event.currentTarget.setPointerCapture?.(event.pointerId);
         suppressClick.current = false;
-        const { pointerId, screenX, screenY } = event;
-        void appWindow.outerPosition().then((position) => {
-          pointerStart.current = {
-            pointerId,
-            screenX,
-            screenY,
-            windowX: position.x,
-            windowY: position.y,
-          };
-        }).catch((error) => console.error('读取悬浮球位置失败', error));
+        pointerStart.current = {
+          pointerId: event.pointerId,
+          clientX: event.clientX,
+          clientY: event.clientY,
+        };
       }}
       onPointerMove={(event) => {
         const start = pointerStart.current;
         if (!start || start.pointerId !== event.pointerId || (event.buttons & 1) === 0) return;
-        const deltaX = event.screenX - start.screenX;
-        const deltaY = event.screenY - start.screenY;
-        if (!suppressClick.current && Math.hypot(deltaX, deltaY) < DRAG_THRESHOLD_PX) return;
+        const deltaX = event.clientX - start.clientX;
+        const deltaY = event.clientY - start.clientY;
+        if (Math.hypot(deltaX, deltaY) < DRAG_THRESHOLD_PX) return;
+        pointerStart.current = null;
         suppressClick.current = true;
-        schedulePosition(new PhysicalPosition(start.windowX + deltaX, start.windowY + deltaY));
+        void commands.startFloatingDrag().catch((error) => console.error('移动悬浮球失败', error));
       }}
       onPointerUp={(event) => {
         if (pointerStart.current?.pointerId === event.pointerId) pointerStart.current = null;

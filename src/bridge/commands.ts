@@ -24,6 +24,7 @@ export interface ChatMessageInput {
 }
 
 export const commands = {
+  startFloatingDrag: () => invoke<void>('start_floating_drag'),
   showChatPanel: (reducedMotion = false) => invoke<void>('show_chat_panel', { reducedMotion }),
   showFloatingBall: (reducedMotion = false) => invoke<void>('show_floating_ball', { reducedMotion }),
   showSettingsPanel: () => invoke<void>('show_settings_panel'),

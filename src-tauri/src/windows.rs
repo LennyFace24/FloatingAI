@@ -6,7 +6,15 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, Webview
 use crate::settings;
 
 #[cfg(windows)]
-use windows_sys::Win32::UI::WindowsAndMessaging::{SetWindowPos, SWP_NOACTIVATE, SWP_NOZORDER};
+use windows_sys::Win32::{
+    Foundation::POINT,
+    UI::{
+        Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON},
+        WindowsAndMessaging::{
+            GetCursorPos, GetWindowRect, SetWindowPos, SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER,
+        },
+    },
+};
 
 pub const FLOATING_LABEL: &str = "floating";
 
@@ -20,6 +28,23 @@ const COLLAPSE_DURATION: Duration = Duration::from_millis(180);
 const FRAME_DURATION: Duration = Duration::from_millis(8);
 
 static ANIMATION_GENERATION: AtomicU64 = AtomicU64::new(0);
+
+fn drag_position(
+    cursor: PhysicalPosition<i32>,
+    offset: PhysicalPosition<i32>,
+) -> PhysicalPosition<i32> {
+    PhysicalPosition::new(cursor.x - offset.x, cursor.y - offset.y)
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+fn crossed_drag_threshold(
+    start: PhysicalPosition<i32>,
+    current: PhysicalPosition<i32>,
+) -> bool {
+    let delta_x = i64::from(current.x) - i64::from(start.x);
+    let delta_y = i64::from(current.y) - i64::from(start.y);
+    delta_x * delta_x + delta_y * delta_y >= 16
+}
 
 #[derive(Clone, Copy)]
 struct WindowBounds {
@@ -157,6 +182,64 @@ async fn animate_window_bounds(
     }
 }
 
+pub async fn start_floating_drag(app: &AppHandle) -> Result<(), String> {
+    let Some(window) = app.get_webview_window(FLOATING_LABEL) else {
+        return Err(tauri::Error::WindowNotFound.to_string());
+    };
+
+    #[cfg(windows)]
+    {
+        let hwnd = window.hwnd().map_err(|error| error.to_string())?.0 as isize;
+        return tauri::async_runtime::spawn_blocking(move || {
+            let mut cursor = POINT { x: 0, y: 0 };
+            let mut window_rect = unsafe { std::mem::zeroed() };
+            if unsafe { GetCursorPos(&mut cursor) } == 0 {
+                return Err(std::io::Error::last_os_error().to_string());
+            }
+            if unsafe { GetWindowRect(hwnd as _, &mut window_rect) } == 0 {
+                return Err(std::io::Error::last_os_error().to_string());
+            }
+
+            let offset = PhysicalPosition::new(
+                cursor.x - window_rect.left,
+                cursor.y - window_rect.top,
+            );
+            while unsafe { GetAsyncKeyState(VK_LBUTTON as i32) } < 0 {
+                if unsafe { GetCursorPos(&mut cursor) } == 0 {
+                    return Err(std::io::Error::last_os_error().to_string());
+                }
+                let position = drag_position(
+                    PhysicalPosition::new(cursor.x, cursor.y),
+                    offset,
+                );
+                if unsafe {
+                    SetWindowPos(
+                        hwnd as _,
+                        std::ptr::null_mut(),
+                        position.x,
+                        position.y,
+                        0,
+                        0,
+                        SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER,
+                    )
+                } == 0
+                {
+                    return Err(std::io::Error::last_os_error().to_string());
+                }
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            Ok(())
+        })
+        .await
+        .map_err(|error| error.to_string())?;
+    }
+
+    #[cfg(not(windows))]
+    {
+        window.start_dragging().map_err(|error| error.to_string())
+    }
+}
+
 pub async fn show_chat_panel(app: &AppHandle, reduced_motion: bool) -> tauri::Result<()> {
     let Some(window) = app.get_webview_window(FLOATING_LABEL) else {
         return Err(tauri::Error::WindowNotFound);
@@ -282,6 +365,23 @@ pub fn attach_floating_position_persistence(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn drag_position_preserves_cursor_offset() {
+        assert_eq!(
+            drag_position(PhysicalPosition::new(125, 240), PhysicalPosition::new(25, 40)),
+            PhysicalPosition::new(100, 200),
+        );
+    }
+
+    #[test]
+    fn drag_threshold_uses_four_pixel_boundary() {
+        let start = PhysicalPosition::new(10, 10);
+        assert!(!crossed_drag_threshold(start, PhysicalPosition::new(13, 10)));
+        assert!(crossed_drag_threshold(start, PhysicalPosition::new(14, 10)));
+        assert!(!crossed_drag_threshold(start, PhysicalPosition::new(12, 13)));
+        assert!(crossed_drag_threshold(start, PhysicalPosition::new(14, 14)));
+    }
 
     #[test]
     fn easing_starts_and_finishes_at_bounds() {
