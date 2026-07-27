@@ -16,9 +16,11 @@ const callbacks = {
 
 let resizeCallback: ResizeObserverCallback;
 let frameCallback: FrameRequestCallback | undefined;
+const createObserver = vi.fn();
 
 class ResizeObserverStub {
   constructor(callback: ResizeObserverCallback) {
+    createObserver();
     resizeCallback = callback;
   }
   observe() {}
@@ -49,6 +51,7 @@ function response(content: string): ConversationState {
 describe('AssistantPanel', () => {
   beforeEach(() => {
     vi.stubGlobal('ResizeObserver', ResizeObserverStub);
+    createObserver.mockClear();
     frameCallback = undefined;
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
       frameCallback = callback;
@@ -114,6 +117,38 @@ describe('AssistantPanel', () => {
     flushFrame();
 
     expect(onContentHeight).toHaveBeenCalledWith(260);
+  });
+
+  it('keeps one measurement session through done and re-emits an equal height for a new request', () => {
+    const onContentHeight = vi.fn();
+    const firstStreaming = response('same height');
+    const { rerender } = render(<AssistantPanel conversation={firstStreaming} {...callbacks} onContentHeight={onContentHeight} />);
+    flushFrame();
+    expect(onContentHeight).toHaveBeenCalledTimes(1);
+
+    const firstDone: ConversationState = {
+      status: 'idle',
+      messages: firstStreaming.messages.map((message) =>
+        message.role === 'assistant' ? { ...message, finishReason: 'done' as const } : message,
+      ),
+    };
+    rerender(<AssistantPanel conversation={firstDone} {...callbacks} onContentHeight={onContentHeight} />);
+    flushFrame();
+    expect(onContentHeight).toHaveBeenCalledTimes(1);
+
+    const secondStreaming: ConversationState = {
+      status: 'streaming',
+      activeRequestId: 'req-2',
+      messages: [
+        ...firstDone.messages,
+        { id: 'u2', role: 'user', content: 'again' },
+        { id: 'a2', role: 'assistant', content: 'same height', requestId: 'req-2' },
+      ],
+    };
+    rerender(<AssistantPanel conversation={secondStreaming} {...callbacks} onContentHeight={onContentHeight} />);
+    flushFrame();
+    expect(onContentHeight).toHaveBeenCalledTimes(2);
+    expect(createObserver).toHaveBeenCalledOnce();
   });
 
   it('follows rerendered streamed deltas only while pinned to bottom', () => {

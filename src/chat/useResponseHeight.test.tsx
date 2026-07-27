@@ -5,10 +5,12 @@ import { isPinnedToBottom, useResponseHeight } from './useResponseHeight';
 let resizeCallback: ResizeObserverCallback;
 const observe = vi.fn();
 const disconnect = vi.fn();
+const createObserver = vi.fn();
 let frames: FrameRequestCallback[];
 
 class ResizeObserverStub {
   constructor(callback: ResizeObserverCallback) {
+    createObserver();
     resizeCallback = callback;
   }
 
@@ -72,6 +74,7 @@ describe('useResponseHeight', () => {
     });
     observe.mockClear();
     disconnect.mockClear();
+    createObserver.mockClear();
   });
 
   afterEach(() => {
@@ -111,6 +114,15 @@ describe('useResponseHeight', () => {
     resizeCallback([], {} as ResizeObserver);
     flushFrame();
     expect(onHeight).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not recreate the observer when callback ref receives the same node across rerenders', () => {
+    const onHeight = vi.fn();
+    const { rerender } = render(<Harness contentKey="a" onHeight={onHeight} />);
+    rerender(<Harness contentKey="ab" onHeight={onHeight} />);
+    rerender(<Harness contentKey="abc" onHeight={onHeight} />);
+    expect(createObserver).toHaveBeenCalledOnce();
+    expect(disconnect).not.toHaveBeenCalled();
   });
 
   it('re-emits an equal height when a new response measurement session starts', () => {

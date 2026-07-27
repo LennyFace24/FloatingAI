@@ -34,9 +34,10 @@ export function AssistantPanel({
   const contentKey = `${conversation.status}:${conversation.error ?? ''}:${conversation.messages
     .map((message) => `${message.id}:${message.content}:${message.finishReason ?? ''}`)
     .join('|')}`;
+  const latestRequestId = [...conversation.messages].reverse().find((message) => message.role === 'assistant')?.requestId;
   const responseRef = useResponseHeight({
     contentKey,
-    measurementSessionKey: phase === 'response' ? `response:${conversation.activeRequestId ?? 'idle'}` : phase,
+    measurementSessionKey: phase === 'response' ? `response:${latestRequestId ?? 'prompt'}` : phase,
     onHeight: onContentHeight,
   });
 
