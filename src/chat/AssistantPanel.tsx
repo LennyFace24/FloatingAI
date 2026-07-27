@@ -4,7 +4,7 @@ import { IconButton } from '../ui/IconButton';
 import { deriveAssistantPhase } from './assistantSurface';
 import type { ConversationState } from './conversation';
 import { RichMessage } from './RichMessage';
-import { useResponseHeight } from './useResponseHeight';
+import { isPinnedToBottom, useResponseHeight } from './useResponseHeight';
 
 interface AssistantPanelProps {
   conversation: ConversationState;
@@ -27,16 +27,21 @@ export function AssistantPanel({
 }: AssistantPanelProps) {
   const [input, setInput] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const responseRef = useRef<HTMLElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
   const isPinnedToBottomRef = useRef(true);
   const phase = deriveAssistantPhase(conversation);
   const isStreaming = conversation.status === 'streaming';
-  const responseRef = useResponseHeight((height) => {
-    onContentHeight(height);
+  const contentKey = `${conversation.status}:${conversation.error ?? ''}:${conversation.messages
+    .map((message) => `${message.id}:${message.content}:${message.finishReason ?? ''}`)
+    .join('|')}`;
+  useResponseHeight({ containerRef: responseRef, contentKey, onHeight: onContentHeight });
+
+  useEffect(() => {
     if (isPinnedToBottomRef.current && messageListRef.current) {
       messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
     }
-  });
+  }, [contentKey]);
 
   useEffect(() => {
     if (phase !== 'waiting') inputRef.current?.focus();
@@ -75,7 +80,7 @@ export function AssistantPanel({
   }
 
   const composer = (
-    <form className="composer-area" onSubmit={handleSubmit}>
+    <form className="composer-area" data-response-composer={phase === 'response' ? '' : undefined} onSubmit={handleSubmit}>
       <div className="composer">
         <textarea
           ref={inputRef}
@@ -123,7 +128,7 @@ export function AssistantPanel({
       aria-label="AI 对话"
       data-testid={phase === 'response' ? 'response-shell' : undefined}
     >
-      <header className="panel-header" data-tauri-drag-region>
+      <header className="panel-header" data-response-header={phase === 'response' ? '' : undefined} data-tauri-drag-region>
         <div className="panel-actions">
           <IconButton label="打开设置" tooltip="设置" onClick={onOpenSettings}>
             <Wrench size={16} />
@@ -141,17 +146,18 @@ export function AssistantPanel({
           role="log"
           aria-live="polite"
           onScroll={(event) => {
-            const list = event.currentTarget;
-            isPinnedToBottomRef.current = list.scrollHeight - list.scrollTop - list.clientHeight <= 2;
+            isPinnedToBottomRef.current = isPinnedToBottom(event.currentTarget);
           }}
         >
-          {conversation.messages.map((message) => (
-            <article className={`message message-${message.role}`} key={message.id}>
-              {message.role === 'assistant' ? <RichMessage content={message.content} /> : <p>{message.content}</p>}
-              {message.finishReason === 'stopped' ? <small className="message-state">已停止</small> : null}
-            </article>
-          ))}
-          {conversation.error ? <p className="chat-error" role="alert">{conversation.error}</p> : null}
+          <div className="message-content" data-response-content>
+            {conversation.messages.map((message) => (
+              <article className={`message message-${message.role}`} key={message.id}>
+                {message.role === 'assistant' ? <RichMessage content={message.content} /> : <p>{message.content}</p>}
+                {message.finishReason === 'stopped' ? <small className="message-state">已停止</small> : null}
+              </article>
+            ))}
+            {conversation.error ? <p className="chat-error" role="alert">{conversation.error}</p> : null}
+          </div>
         </div>
       ) : null}
 

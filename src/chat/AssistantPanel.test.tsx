@@ -17,20 +17,33 @@ const callbacks = {
 let resizeCallback: ResizeObserverCallback;
 let frameCallback: FrameRequestCallback | undefined;
 
-function notifyResize() {
-  resizeCallback([], {} as ResizeObserver);
+class ResizeObserverStub {
+  constructor(callback: ResizeObserverCallback) {
+    resizeCallback = callback;
+  }
+  observe() {}
+  disconnect() {}
+}
+
+function flushFrame() {
   const callback = frameCallback;
   frameCallback = undefined;
   callback?.(0);
 }
 
-class ResizeObserverStub {
-  constructor(callback: ResizeObserverCallback) {
-    resizeCallback = callback;
-  }
+function setHeight(element: Element, height: number) {
+  vi.spyOn(element, 'getBoundingClientRect').mockReturnValue({ height } as DOMRect);
+}
 
-  observe() {}
-  disconnect() {}
+function response(content: string): ConversationState {
+  return {
+    status: 'streaming',
+    activeRequestId: 'req-1',
+    messages: [
+      { id: 'u1', role: 'user', content: 'hello' },
+      { id: 'a1', role: 'assistant', content, requestId: 'req-1' },
+    ],
+  };
 }
 
 describe('AssistantPanel', () => {
@@ -42,9 +55,9 @@ describe('AssistantPanel', () => {
       return 1;
     });
   });
+
   it('renders one prompt input surface without an empty message list', () => {
     render(<AssistantPanel conversation={idle} {...callbacks} />);
-
     expect(screen.getAllByLabelText('输入问题')).toHaveLength(1);
     expect(screen.queryByRole('log')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '打开设置' })).toHaveAttribute('title', '设置');
@@ -55,15 +68,10 @@ describe('AssistantPanel', () => {
     const user = userEvent.setup();
     const onStop = vi.fn(() => Promise.resolve());
     const waiting: ConversationState = {
-      status: 'streaming',
-      activeRequestId: 'req-1',
-      messages: [
-        { id: 'u1', role: 'user', content: 'hello' },
-        { id: 'a1', role: 'assistant', content: '', requestId: 'req-1' },
-      ],
+      status: 'streaming', activeRequestId: 'req-1',
+      messages: [{ id: 'u1', role: 'user', content: 'hello' }, { id: 'a1', role: 'assistant', content: '', requestId: 'req-1' }],
     };
     render(<AssistantPanel conversation={waiting} {...callbacks} onStop={onStop} />);
-
     expect(screen.getByRole('button', { name: '停止生成' })).toHaveAttribute('title', '停止生成');
     expect(screen.queryByLabelText('输入问题')).not.toBeInTheDocument();
     expect(screen.queryByRole('log')).not.toBeInTheDocument();
@@ -71,58 +79,45 @@ describe('AssistantPanel', () => {
     expect(onStop).toHaveBeenCalledWith('req-1');
   });
 
-  it('renders rich response messages with a bottom composer', () => {
-    const response: ConversationState = {
-      status: 'idle',
-      messages: [
-        { id: 'u1', role: 'user', content: 'hello' },
-        { id: 'a1', role: 'assistant', content: '**answer**', requestId: 'req-1', finishReason: 'done' },
-      ],
-    };
-    render(<AssistantPanel conversation={response} {...callbacks} />);
-
+  it('renders rich response messages with a bottom composer and one overflow owner', () => {
+    render(<AssistantPanel conversation={response('**answer**')} {...callbacks} />);
+    const shell = screen.getByTestId('response-shell');
     expect(screen.getByRole('log')).toHaveTextContent('hello');
     expect(screen.getByRole('strong')).toHaveTextContent('answer');
     expect(screen.getByLabelText('输入问题')).toBeInTheDocument();
+    expect(shell.querySelector('[data-response-header]')).toBeInTheDocument();
+    expect(shell.querySelector('[data-response-content]')).toBeInTheDocument();
+    expect(shell.querySelector('[data-response-composer]')).toBeInTheDocument();
+    expect(screen.getByRole('log')).toContainElement(shell.querySelector('[data-response-content]'));
   });
 
   it('disables response input and exposes stop while streaming', () => {
-    const response: ConversationState = {
-      status: 'streaming',
-      activeRequestId: 'req-1',
-      messages: [
-        { id: 'u1', role: 'user', content: 'hello' },
-        { id: 'a1', role: 'assistant', content: 'a', requestId: 'req-1' },
-      ],
-    };
-    render(<AssistantPanel conversation={response} {...callbacks} />);
-
+    render(<AssistantPanel conversation={response('a')} {...callbacks} />);
     expect(screen.getByLabelText('输入问题')).toBeDisabled();
     expect(screen.getByRole('button', { name: '停止' })).toHaveAttribute('title', '停止生成');
   });
 
-  it('reports the response shell scroll height without a duplicate minimum callback', () => {
+  it('rerenders streamed deltas and reports header, natural content, and composer height', () => {
     const onContentHeight = vi.fn();
-    render(<AssistantPanel conversation={{ status: 'error', error: 'failed', messages: [] }} {...callbacks} onContentHeight={onContentHeight} />);
+    const { rerender } = render(<AssistantPanel conversation={response('a')} {...callbacks} onContentHeight={onContentHeight} />);
     const shell = screen.getByTestId('response-shell');
-    Object.defineProperty(shell, 'scrollHeight', { configurable: true, value: 238 });
+    setHeight(shell.querySelector('[data-response-header]')!, 48);
+    const contentRect = vi
+      .spyOn(shell.querySelector('[data-response-content]')!, 'getBoundingClientRect')
+      .mockReturnValue({ height: 44 } as DOMRect);
+    setHeight(shell.querySelector('[data-response-composer]')!, 80);
 
-    notifyResize();
+    flushFrame();
+    contentRect.mockReturnValue({ height: 132 } as DOMRect);
 
-    expect(onContentHeight).toHaveBeenCalledOnce();
-    expect(onContentHeight).toHaveBeenCalledWith(238);
+    rerender(<AssistantPanel conversation={response('a streamed delta')} {...callbacks} onContentHeight={onContentHeight} />);
+    flushFrame();
+
+    expect(onContentHeight).toHaveBeenCalledWith(260);
   });
 
-  it('follows streamed content only while the message list is pinned to bottom', () => {
-    const response: ConversationState = {
-      status: 'streaming',
-      activeRequestId: 'req-1',
-      messages: [
-        { id: 'u1', role: 'user', content: 'hello' },
-        { id: 'a1', role: 'assistant', content: 'answer', requestId: 'req-1' },
-      ],
-    };
-    render(<AssistantPanel conversation={response} {...callbacks} />);
+  it('follows rerendered streamed deltas only while pinned to bottom', () => {
+    const { rerender } = render(<AssistantPanel conversation={response('a')} {...callbacks} />);
     const list = screen.getByRole('log');
     let scrollHeight = 300;
     Object.defineProperties(list, {
@@ -130,20 +125,24 @@ describe('AssistantPanel', () => {
       scrollHeight: { configurable: true, get: () => scrollHeight },
     });
     list.scrollTop = 200;
-
-    notifyResize();
-    expect(list.scrollTop).toBe(300);
+    flushFrame();
+    resizeCallback([], {} as ResizeObserver);
+    flushFrame();
 
     list.scrollTop = 140;
     fireEvent.scroll(list);
     scrollHeight = 340;
-    notifyResize();
+    rerender(<AssistantPanel conversation={response('a delta')} {...callbacks} />);
+    flushFrame();
     expect(list.scrollTop).toBe(140);
 
     list.scrollTop = 238;
     fireEvent.scroll(list);
+    resizeCallback([], {} as ResizeObserver);
+    flushFrame();
     scrollHeight = 380;
-    notifyResize();
+    rerender(<AssistantPanel conversation={response('a second delta')} {...callbacks} />);
+    flushFrame();
     expect(list.scrollTop).toBe(380);
   });
 
@@ -151,7 +150,6 @@ describe('AssistantPanel', () => {
     const user = userEvent.setup();
     const onCollapse = vi.fn();
     render(<AssistantPanel conversation={idle} {...callbacks} onCollapse={onCollapse} />);
-
     await user.keyboard('{Escape}');
     expect(onCollapse).toHaveBeenCalledOnce();
   });
