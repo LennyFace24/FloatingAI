@@ -164,24 +164,49 @@ fn set_window_bounds(window: &WebviewWindow, bounds: WindowBounds) -> tauri::Res
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AnimationOutcome {
+    Completed,
+    Cancelled,
+}
+
+impl AnimationOutcome {
+    fn should_finish_transition(self) -> bool {
+        self == Self::Completed
+    }
+}
+
+fn animation_outcome(generation: u64, current_generation: u64) -> AnimationOutcome {
+    if generation == current_generation {
+        AnimationOutcome::Completed
+    } else {
+        AnimationOutcome::Cancelled
+    }
+}
+
+fn cancel_window_animation() {
+    ANIMATION_GENERATION.fetch_add(1, Ordering::SeqCst);
+}
+
 async fn animate_window_bounds(
     window: &WebviewWindow,
     target: WindowBounds,
     duration: Duration,
     reduced_motion: bool,
-) -> tauri::Result<()> {
+) -> tauri::Result<AnimationOutcome> {
     let generation = ANIMATION_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
     let start = current_bounds(window)?;
 
     if reduced_motion {
         set_window_bounds(window, target)?;
-        return Ok(());
+        return Ok(AnimationOutcome::Completed);
     }
 
     let started = Instant::now();
     loop {
-        if ANIMATION_GENERATION.load(Ordering::SeqCst) != generation {
-            return Ok(());
+        let outcome = animation_outcome(generation, ANIMATION_GENERATION.load(Ordering::SeqCst));
+        if !outcome.should_finish_transition() {
+            return Ok(outcome);
         }
         let raw_progress = (started.elapsed().as_secs_f64() / duration.as_secs_f64()).min(1.0);
         let progress = ease_out_cubic(raw_progress);
@@ -199,7 +224,7 @@ async fn animate_window_bounds(
             },
         )?;
         if raw_progress >= 1.0 {
-            return Ok(());
+            return Ok(AnimationOutcome::Completed);
         }
         tokio::time::sleep(FRAME_DURATION).await;
     }
@@ -262,26 +287,26 @@ pub async fn start_floating_drag(app: &AppHandle) -> Result<(), String> {
         window.start_dragging().map_err(|error| error.to_string())
     }
 }
-
 pub async fn show_prompt_bar(app: &AppHandle, reduced_motion: bool) -> tauri::Result<()> {
-    show_bottom_anchored(app, "prompt", |geometry| geometry.prompt_bounds(), reduced_motion).await
+    show_bottom_anchored(app, |geometry| geometry.prompt_bounds(), reduced_motion).await
 }
-
 pub async fn show_waiting_ball(app: &AppHandle, reduced_motion: bool) -> tauri::Result<()> {
-    show_bottom_anchored(app, "waiting", |geometry| geometry.waiting_bounds(), reduced_motion).await
+    show_bottom_anchored(app, |geometry| geometry.waiting_bounds(), reduced_motion).await
 }
-
 pub async fn resize_response_panel(
     app: &AppHandle,
     content_height: f64,
     reduced_motion: bool,
 ) -> tauri::Result<()> {
-    show_bottom_anchored(app, "response", |geometry| geometry.response_bounds(content_height), reduced_motion).await
+    let Some(window) = app.get_webview_window(FLOATING_LABEL) else {
+        return Err(tauri::Error::WindowNotFound);
+    };
+    let target = surface_geometry(&window)?.response_bounds(content_height);
+    let _ = animate_window_bounds(&window, target, EXPAND_DURATION, reduced_motion).await?;
+    Ok(())
 }
-
 async fn show_bottom_anchored<F: FnOnce(SurfaceGeometry) -> WindowBounds>(
     app: &AppHandle,
-    surface: &str,
     bounds: F,
     reduced_motion: bool,
 ) -> tauri::Result<()> {
@@ -290,15 +315,17 @@ async fn show_bottom_anchored<F: FnOnce(SurfaceGeometry) -> WindowBounds>(
     };
     let target = bounds(surface_geometry(&window)?);
     window.set_resizable(false)?;
-    window.emit("surface://changed", surface)?;
+    window.emit("surface://changed", "chat")?;
     window.show()?;
-    animate_window_bounds(&window, target, EXPAND_DURATION, reduced_motion).await?;
-    window.set_focus()?;
+    let outcome = animate_window_bounds(&window, target, EXPAND_DURATION, reduced_motion).await?;
+    if outcome.should_finish_transition() {
+        window.set_focus()?;
+    }
     Ok(())
 }
 
 pub async fn show_chat_panel(app: &AppHandle, reduced_motion: bool) -> tauri::Result<()> {
-    show_bottom_anchored(app, "chat", |geometry| geometry.prompt_bounds(), reduced_motion).await
+    show_prompt_bar(app, reduced_motion).await
 }
 
 pub async fn show_floating_ball(app: &AppHandle, reduced_motion: bool) -> tauri::Result<()> {
@@ -309,7 +336,10 @@ pub async fn show_floating_ball(app: &AppHandle, reduced_motion: bool) -> tauri:
     let size = logical_size(&window, FLOATING_SIZE, FLOATING_SIZE)?;
     let target = WindowBounds { position: current.position, size };
     window.set_resizable(false)?;
-    animate_window_bounds(&window, target, COLLAPSE_DURATION, reduced_motion).await?;
+    let outcome = animate_window_bounds(&window, target, COLLAPSE_DURATION, reduced_motion).await?;
+    if !outcome.should_finish_transition() {
+        return Ok(());
+    }
     window.emit("surface://changed", "floating")?;
     let always_on_top = settings::load_settings(app)
         .map(|stored| stored.floating_always_on_top)
@@ -321,6 +351,7 @@ pub async fn show_floating_ball(app: &AppHandle, reduced_motion: bool) -> tauri:
 }
 
 pub fn show_settings_panel(app: &AppHandle) -> tauri::Result<()> {
+    cancel_window_animation();
     let Some(window) = app.get_webview_window(FLOATING_LABEL) else {
         return Err(tauri::Error::WindowNotFound);
     };
@@ -333,6 +364,7 @@ pub fn show_settings_panel(app: &AppHandle) -> tauri::Result<()> {
 }
 
 pub fn hide_all_windows(app: &AppHandle) -> tauri::Result<()> {
+    cancel_window_animation();
     if let Some(window) = app.get_webview_window(FLOATING_LABEL) {
         window.hide()?;
     }
@@ -454,6 +486,14 @@ mod tests {
         assert_eq!(interpolate_i32(10, 100, 1.0), 100);
         assert_eq!(interpolate_u32(50, 480, 1.0), 480);
     }
+    #[test]
+    fn bottom_anchored_cancelled_animation_skips_completion_side_effects() {
+        assert_eq!(animation_outcome(7, 8), AnimationOutcome::Cancelled);
+        assert_eq!(animation_outcome(8, 8), AnimationOutcome::Completed);
+        assert!(!animation_outcome(7, 8).should_finish_transition());
+        assert!(animation_outcome(8, 8).should_finish_transition());
+    }
+
     fn geometry(scale_factor: f64) -> SurfaceGeometry {
         SurfaceGeometry {
             work_area_position: PhysicalPosition::new(100, 50),
