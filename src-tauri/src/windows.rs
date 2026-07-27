@@ -97,6 +97,21 @@ impl SurfaceGeometry {
             content_height.clamp(RESPONSE_MIN_HEIGHT, RESPONSE_MAX_HEIGHT),
         )
     }
+    fn settings_bounds(self, current: WindowBounds) -> WindowBounds {
+        let width = ((SETTINGS_WIDTH * self.scale_factor).round() as u32)
+            .min(self.work_area_size.width);
+        let height = ((SETTINGS_HEIGHT * self.scale_factor).round() as u32)
+            .min(self.work_area_size.height);
+        let max_x = self.work_area_position.x + self.work_area_size.width as i32 - width as i32;
+        let max_y = self.work_area_position.y + self.work_area_size.height as i32 - height as i32;
+        WindowBounds {
+            position: PhysicalPosition::new(
+                current.position.x.clamp(self.work_area_position.x, max_x),
+                current.position.y.clamp(self.work_area_position.y, max_y),
+            ),
+            size: PhysicalSize::new(width, height),
+        }
+    }
 }
 
 fn surface_geometry(window: &WebviewWindow) -> tauri::Result<SurfaceGeometry> {
@@ -487,7 +502,8 @@ pub fn show_settings_panel(app: &AppHandle) -> tauri::Result<()> {
     let Some(window) = app.get_webview_window(FLOATING_LABEL) else {
         return Err(tauri::Error::WindowNotFound);
     };
-    window.set_size(logical_size(&window, SETTINGS_WIDTH, SETTINGS_HEIGHT)?)?;
+    let target = surface_geometry(&window)?.settings_bounds(current_bounds(&window)?);
+    set_window_bounds(&window, target)?;
     window.set_resizable(false)?;
     window.emit("surface://changed", "settings")?;
     window.show()?;
@@ -741,4 +757,46 @@ mod tests {
         assert_eq!(bounds.position.x, -900);
         assert_eq!(bounds.size.width, 600);
     }
+    #[test]
+    fn settings_bounds_clamp_bottom_and_right_edges() {
+        let current = WindowBounds {
+            position: PhysicalPosition::new(1800, 1000),
+            size: PhysicalSize::new(640, 58),
+        };
+        let bounds = geometry(1.0).settings_bounds(current);
+        assert_eq!(bounds.position, PhysicalPosition::new(1560, 570));
+        assert_eq!(bounds.size, PhysicalSize::new(460, 560));
+    }
+
+    #[test]
+    fn settings_bounds_support_negative_monitor_coordinates_and_scale() {
+        let geometry = SurfaceGeometry {
+            work_area_position: PhysicalPosition::new(-1920, -120),
+            work_area_size: PhysicalSize::new(1920, 1080),
+            scale_factor: 1.5,
+        };
+        let current = WindowBounds {
+            position: PhysicalPosition::new(-2000, 800),
+            size: PhysicalSize::new(75, 75),
+        };
+        let bounds = geometry.settings_bounds(current);
+        assert_eq!(bounds.position, PhysicalPosition::new(-1920, 120));
+        assert_eq!(bounds.size, PhysicalSize::new(690, 840));
+    }
+
+    #[test]
+    fn settings_bounds_shrink_to_fit_a_small_work_area() {
+        let geometry = SurfaceGeometry {
+            work_area_position: PhysicalPosition::new(20, 30),
+            work_area_size: PhysicalSize::new(400, 300),
+            scale_factor: 1.0,
+        };
+        let bounds = geometry.settings_bounds(WindowBounds {
+            position: PhysicalPosition::new(200, 200),
+            size: PhysicalSize::new(50, 50),
+        });
+        assert_eq!(bounds.position, PhysicalPosition::new(20, 30));
+        assert_eq!(bounds.size, PhysicalSize::new(400, 300));
+    }
+
 }

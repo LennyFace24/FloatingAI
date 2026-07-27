@@ -2,6 +2,7 @@ import { FormEvent, useState } from 'react';
 import { normalizeSettingsForm, type SettingsFormInput, validateSettingsForm } from './settings';
 import { IconButton } from '../ui/IconButton';
 import { Minus } from '../ui/icons';
+import { useWindowDrag } from '../window/useWindowDrag';
 
 interface SettingsPanelProps {
   initialSettings: SettingsFormInput;
@@ -14,6 +15,7 @@ export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPane
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saveError, setSaveError] = useState('');
   const [saving, setSaving] = useState(false);
+  const drag = useWindowDrag();
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -34,14 +36,14 @@ export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPane
   }
 
   return (
-    <section className="settings-panel surface-panel" aria-label="设置">
-      <header className="panel-header settings-header" data-tauri-drag-region>
+    <section className="settings-panel surface-panel" aria-label="设置" {...drag.pointerProps}>
+      <header className="panel-header settings-header">
         <h1>设置</h1>
         <IconButton label="关闭设置" tooltip="返回对话" onClick={onClose}>
           <Minus size={17} />
         </IconButton>
       </header>
-      <form className="settings-form" onSubmit={handleSubmit}>
+      <form className="settings-form" data-window-drag-exclude onSubmit={handleSubmit}>
         <label>
           API Key
           <input

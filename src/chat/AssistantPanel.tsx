@@ -5,6 +5,7 @@ import { deriveAssistantPhase } from './assistantSurface';
 import type { ConversationState } from './conversation';
 import { RichMessage } from './RichMessage';
 import { isPinnedToBottom, useResponseHeight } from './useResponseHeight';
+import { useWindowDrag } from '../window/useWindowDrag';
 
 interface AssistantPanelProps {
   conversation: ConversationState;
@@ -29,6 +30,7 @@ export function AssistantPanel({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
   const isPinnedToBottomRef = useRef(true);
+  const drag = useWindowDrag({ allowInteractiveRoot: true });
   const phase = deriveAssistantPhase(conversation);
   const isStreaming = conversation.status === 'streaming';
   const contentKey = `${conversation.status}:${conversation.error ?? ''}:${conversation.messages
@@ -75,7 +77,10 @@ export function AssistantPanel({
           type="button"
           aria-label="停止生成"
           title="停止生成"
-          onClick={() => conversation.activeRequestId && void onStop(conversation.activeRequestId)}
+          {...drag.pointerProps}
+          onClick={() => {
+            if (!drag.consumeClick() && conversation.activeRequestId) void onStop(conversation.activeRequestId);
+          }}
         >
           <span className="waiting-indicator" aria-hidden="true" />
         </button>
@@ -84,7 +89,11 @@ export function AssistantPanel({
   }
 
   const composer = (
-    <form className="composer-area" data-response-composer={phase === 'response' ? '' : undefined} onSubmit={handleSubmit}>
+    <form
+      className="composer-area"
+      data-response-composer={phase === 'response' ? '' : undefined}
+      onSubmit={handleSubmit}
+    >
       <div className="composer">
         <textarea
           ref={inputRef}
@@ -131,8 +140,9 @@ export function AssistantPanel({
       className={`assistant-panel assistant-${phase} surface-panel`}
       aria-label="AI 对话"
       data-testid={phase === 'response' ? 'response-shell' : undefined}
+      {...drag.pointerProps}
     >
-      <header className="panel-header" data-response-header={phase === 'response' ? '' : undefined} data-tauri-drag-region>
+      <header className="panel-header" data-response-header={phase === 'response' ? '' : undefined}>
         <div className="panel-actions">
           <IconButton label="打开设置" tooltip="设置" onClick={onOpenSettings}>
             <Wrench size={16} />
@@ -148,6 +158,7 @@ export function AssistantPanel({
           ref={messageListRef}
           className="message-list"
           data-response-scroll
+          data-window-drag-exclude
           role="log"
           aria-live="polite"
           onScroll={(event) => {
