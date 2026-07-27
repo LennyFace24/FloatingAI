@@ -4,6 +4,7 @@ import { IconButton } from '../ui/IconButton';
 import { deriveAssistantPhase } from './assistantSurface';
 import type { ConversationState } from './conversation';
 import { RichMessage } from './RichMessage';
+import { useResponseHeight } from './useResponseHeight';
 
 interface AssistantPanelProps {
   conversation: ConversationState;
@@ -26,12 +27,19 @@ export function AssistantPanel({
 }: AssistantPanelProps) {
   const [input, setInput] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const messageListRef = useRef<HTMLDivElement>(null);
+  const isPinnedToBottomRef = useRef(true);
   const phase = deriveAssistantPhase(conversation);
   const isStreaming = conversation.status === 'streaming';
+  const responseRef = useResponseHeight((height) => {
+    onContentHeight(height);
+    if (isPinnedToBottomRef.current && messageListRef.current) {
+      messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
+    }
+  });
 
   useEffect(() => {
     if (phase !== 'waiting') inputRef.current?.focus();
-    if (phase === 'response') onContentHeight(120);
   }, [phase]);
 
   useEffect(() => {
@@ -109,7 +117,12 @@ export function AssistantPanel({
   );
 
   return (
-    <section className={`assistant-panel assistant-${phase} surface-panel`} aria-label="AI 对话">
+    <section
+      ref={phase === 'response' ? responseRef : undefined}
+      className={`assistant-panel assistant-${phase} surface-panel`}
+      aria-label="AI 对话"
+      data-testid={phase === 'response' ? 'response-shell' : undefined}
+    >
       <header className="panel-header" data-tauri-drag-region>
         <div className="panel-actions">
           <IconButton label="打开设置" tooltip="设置" onClick={onOpenSettings}>
@@ -122,7 +135,16 @@ export function AssistantPanel({
       </header>
 
       {phase === 'response' ? (
-        <div className="message-list" role="log" aria-live="polite">
+        <div
+          ref={messageListRef}
+          className="message-list"
+          role="log"
+          aria-live="polite"
+          onScroll={(event) => {
+            const list = event.currentTarget;
+            isPinnedToBottomRef.current = list.scrollHeight - list.scrollTop - list.clientHeight <= 2;
+          }}
+        >
           {conversation.messages.map((message) => (
             <article className={`message message-${message.role}`} key={message.id}>
               {message.role === 'assistant' ? <RichMessage content={message.content} /> : <p>{message.content}</p>}

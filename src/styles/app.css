@@ -74,8 +74,47 @@ button { color: inherit; }
   overflow: hidden;
 }
 
-.chat-panel { display: grid; grid-template-rows: 48px 1fr auto; }
+.chat-panel,
+.assistant-response { display: grid; grid-template-rows: 48px minmax(0, 1fr) auto; }
 .settings-panel { display: grid; grid-template-rows: 48px 1fr; }
+
+.assistant-prompt {
+  width: 640px;
+  height: 58px;
+  display: block;
+  border-radius: 14px;
+}
+.assistant-prompt .panel-header { display: none; }
+.assistant-prompt .composer-area { height: 58px; padding: 0; border: 0; }
+.assistant-prompt .composer { height: 58px; min-height: 58px; border-radius: 14px; }
+
+.assistant-waiting {
+  width: 50px;
+  height: 50px;
+  display: grid;
+  place-items: center;
+}
+.waiting-stop {
+  width: 50px;
+  height: 50px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid #3a3a3a;
+  border-radius: 50%;
+  background: #090909;
+  cursor: pointer;
+}
+.waiting-indicator {
+  width: 22px;
+  height: 22px;
+  border: 2px solid #3d3d3d;
+  border-top-color: #b8b8b8;
+  border-radius: 50%;
+  animation: waiting-spin 800ms linear infinite;
+}
+
+.assistant-response { overflow: hidden; }
 
 .panel-header {
   min-height: 48px;
@@ -236,6 +275,7 @@ button { color: inherit; }
 .save-button:disabled { opacity: .45; cursor: default; }
 
 @keyframes blink { 50% { opacity: 0; } }
+@keyframes waiting-spin { to { transform: rotate(360deg); } }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
