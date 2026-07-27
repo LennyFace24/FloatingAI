@@ -181,10 +181,20 @@ describe('AssistantPanel', () => {
     expect(list.scrollTop).toBe(380);
   });
 
-  it('collapses on Escape', async () => {
+  it.each([
+    ['prompt', idle],
+    ['waiting', { status: 'streaming', activeRequestId: 'req-1', messages: [
+      { id: 'u1', role: 'user', content: 'hello' },
+      { id: 'a1', role: 'assistant', content: '', requestId: 'req-1' },
+    ] } satisfies ConversationState],
+    ['response', response('partial')],
+    ['error', { status: 'error', error: 'failed', messages: [
+      { id: 'u1', role: 'user', content: 'hello' },
+    ] } satisfies ConversationState],
+  ])('collapses the %s phase on Escape', async (_phase, conversation) => {
     const user = userEvent.setup();
     const onCollapse = vi.fn();
-    render(<AssistantPanel conversation={idle} {...callbacks} onCollapse={onCollapse} />);
+    render(<AssistantPanel conversation={conversation} {...callbacks} onCollapse={onCollapse} />);
     await user.keyboard('{Escape}');
     expect(onCollapse).toHaveBeenCalledOnce();
   });

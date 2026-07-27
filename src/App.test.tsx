@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   showSettingsPanel: vi.fn(() => Promise.resolve()),
   startChat: vi.fn((_requestId: string, _messages: unknown[]) => Promise.resolve()),
   stopChat: vi.fn(() => Promise.resolve()),
+  saveSettings: vi.fn(() => Promise.resolve()),
   deltaHandler: undefined as undefined | ((payload: { requestId: string; content: string }) => void),
   doneHandler: undefined as undefined | ((payload: { requestId: string }) => void),
   errorHandler: undefined as undefined | ((payload: { requestId: string; message: string }) => void),
@@ -36,7 +37,7 @@ vi.mock('./bridge/commands', () => ({
     showFloatingBall: mocks.showFloatingBall,
     showSettingsPanel: mocks.showSettingsPanel,
     getSettings: mocks.getSettings,
-    saveSettings: () => Promise.resolve(),
+    saveSettings: mocks.saveSettings,
     startChat: mocks.startChat,
     stopChat: mocks.stopChat,
   },
@@ -65,6 +66,11 @@ vi.mock('./bridge/events', () => ({
 
 import App from './App';
 
+class ResizeObserverStub {
+  observe() {}
+  disconnect() {}
+}
+
 async function openAssistant() {
   fireEvent.click(screen.getByRole('button', { name: '打开 AI 对话' }));
   expect(await screen.findByRole('region', { name: 'AI 对话' })).toBeInTheDocument();
@@ -72,6 +78,11 @@ async function openAssistant() {
 
 describe('App assistant surface state flow', () => {
   beforeEach(() => {
+    vi.stubGlobal('ResizeObserver', ResizeObserverStub);
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      queueMicrotask(() => callback(0));
+      return 1;
+    });
     vi.clearAllMocks();
     mocks.deltaHandler = undefined;
     mocks.doneHandler = undefined;
@@ -212,6 +223,38 @@ describe('App assistant surface state flow', () => {
 
     expect(await screen.findByText('测试消息')).toBeInTheDocument();
     expect(await screen.findByRole('alert')).toHaveTextContent('请先在设置中配置 API Key');
+  });
+
+  it('round-trips loaded settings through save before returning to the prompt', async () => {
+    const user = userEvent.setup();
+    mocks.getSettings.mockResolvedValueOnce({
+      apiKeyConfigured: true,
+      baseUrl: 'https://api.example.com/v1',
+      model: 'gpt-test',
+      globalShortcut: 'Ctrl+Shift+Space',
+      autostartEnabled: true,
+      floatingAlwaysOnTop: false,
+    });
+    render(<App />);
+    await openAssistant();
+
+    await user.click(screen.getByRole('button', { name: '打开设置' }));
+    expect(await screen.findByLabelText('Base URL')).toHaveValue('https://api.example.com/v1');
+    expect(screen.getByLabelText('模型名')).toHaveValue('gpt-test');
+    expect(screen.getByLabelText('全局快捷键')).toHaveValue('Ctrl+Shift+Space');
+    expect(screen.getByRole('checkbox', { name: '开机自启' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: '悬浮球置顶' })).not.toBeChecked();
+
+    await user.click(screen.getByRole('button', { name: '保存设置' }));
+    await waitFor(() => expect(mocks.saveSettings).toHaveBeenCalledWith({
+      apiKey: '',
+      baseUrl: 'https://api.example.com/v1',
+      model: 'gpt-test',
+      globalShortcut: 'Ctrl+Shift+Space',
+      autostartEnabled: true,
+      floatingAlwaysOnTop: false,
+    }));
+    await waitFor(() => expect(mocks.showPromptBar).toHaveBeenCalledTimes(2));
   });
 
   it('returns from settings to the derived phase and collapses to the ball', async () => {

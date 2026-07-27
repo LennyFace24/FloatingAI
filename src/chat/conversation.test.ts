@@ -58,21 +58,35 @@ describe('conversationReducer', () => {
     expect(stopped.messages[1].finishReason).toBe('stopped');
   });
 
-  it('records errors without dropping conversation', () => {
+  it('removes the empty assistant placeholder but keeps the prompt on a first-token error', () => {
     const streaming = conversationReducer(initialConversationState, {
-      type: 'send',
-      requestId: 'req-1',
-      content: 'hello',
+      type: 'send', requestId: 'req-1', content: 'hello',
     });
     const failed = conversationReducer(streaming, {
-      type: 'error',
-      requestId: 'req-1',
-      message: '网络请求失败',
+      type: 'error', requestId: 'req-1', message: '网络请求失败',
     });
 
-    expect(failed.status).toBe('error');
-    expect(failed.error).toBe('网络请求失败');
-    expect(failed.messages).toHaveLength(2);
+    expect(failed).toEqual({
+      status: 'error',
+      error: '网络请求失败',
+      messages: [{ id: 'user-req-1', role: 'user', content: 'hello' }],
+    });
+  });
+
+  it('preserves partial assistant content on a streaming error', () => {
+    const streaming = conversationReducer(initialConversationState, {
+      type: 'send', requestId: 'req-1', content: 'hello',
+    });
+    const partial = conversationReducer(streaming, {
+      type: 'delta', requestId: 'req-1', content: 'partial',
+    });
+    const failed = conversationReducer(partial, {
+      type: 'error', requestId: 'req-1', message: '网络请求失败',
+    });
+
+    expect(failed.messages[1]).toMatchObject({
+      role: 'assistant', content: 'partial', finishReason: 'error',
+    });
   });
 
   it('ignores late events from an inactive request', () => {

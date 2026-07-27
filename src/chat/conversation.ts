@@ -93,16 +93,20 @@ export function conversationReducer(
           message.requestId === action.requestId ? { ...message, finishReason: 'stopped' } : message,
         ),
       };
-    case 'error':
+    case 'error': {
+      const hasPartialContent = state.messages.some(
+        (message) => message.requestId === action.requestId && message.content,
+      );
       return {
-        ...state,
         status: 'error',
-        activeRequestId: undefined,
         error: action.message,
-        messages: state.messages.map((message) =>
-          message.requestId === action.requestId ? { ...message, finishReason: 'error' } : message,
-        ),
+        messages: state.messages
+          .filter((message) => hasPartialContent || message.requestId !== action.requestId)
+          .map((message) =>
+            message.requestId === action.requestId ? { ...message, finishReason: 'error' } : message,
+          ),
       };
+    }
     case 'clear':
       return initialConversationState;
   }

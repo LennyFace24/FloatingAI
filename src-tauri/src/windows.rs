@@ -187,6 +187,33 @@ fn animation_outcome(generation: u64, current_generation: u64) -> AnimationOutco
 fn cancel_window_animation() {
     ANIMATION_GENERATION.fetch_add(1, Ordering::SeqCst);
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AnimationPlan {
+    Direct,
+    Interpolated,
+}
+
+fn animation_plan(reduced_motion: bool) -> AnimationPlan {
+    if reduced_motion {
+        AnimationPlan::Direct
+    } else {
+        AnimationPlan::Interpolated
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ChatPanelRequest {
+    Prompt,
+    Floating,
+}
+
+fn chat_panel_request(is_expanded: bool) -> ChatPanelRequest {
+    if is_expanded {
+        ChatPanelRequest::Floating
+    } else {
+        ChatPanelRequest::Prompt
+    }
+}
 
 async fn animate_window_bounds(
     window: &WebviewWindow,
@@ -197,7 +224,7 @@ async fn animate_window_bounds(
     let generation = ANIMATION_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
     let start = current_bounds(window)?;
 
-    if reduced_motion {
+    if animation_plan(reduced_motion) == AnimationPlan::Direct {
         set_window_bounds(window, target)?;
         return Ok(AnimationOutcome::Completed);
     }
@@ -374,7 +401,7 @@ pub fn hide_all_windows(app: &AppHandle) -> tauri::Result<()> {
 pub fn request_show_chat_panel(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        let _ = show_chat_panel(&app, false).await;
+        let _ = show_prompt_bar(&app, false).await;
     });
 }
 
@@ -392,10 +419,13 @@ pub fn request_toggle_chat_panel(app: &AppHandle) {
             .get_webview_window(FLOATING_LABEL)
             .and_then(|window| window.inner_size().ok())
             .is_some_and(|size| size.width > 100);
-        if is_expanded {
-            let _ = show_floating_ball(&app, false).await;
-        } else {
-            let _ = show_chat_panel(&app, false).await;
+        match chat_panel_request(is_expanded) {
+            ChatPanelRequest::Floating => {
+                let _ = show_floating_ball(&app, false).await;
+            }
+            ChatPanelRequest::Prompt => {
+                let _ = show_prompt_bar(&app, false).await;
+            }
         }
     });
 }
@@ -454,6 +484,18 @@ pub fn attach_floating_position_persistence(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reduced_motion_uses_one_direct_target_commit() {
+        assert_eq!(animation_plan(true), AnimationPlan::Direct);
+        assert_eq!(animation_plan(false), AnimationPlan::Interpolated);
+    }
+
+    #[test]
+    fn tray_and_shortcut_compatibility_select_prompt_mode() {
+        assert_eq!(chat_panel_request(false), ChatPanelRequest::Prompt);
+        assert_eq!(chat_panel_request(true), ChatPanelRequest::Floating);
+    }
 
     #[test]
     fn drag_persistence_only_commits_latest_move() {
