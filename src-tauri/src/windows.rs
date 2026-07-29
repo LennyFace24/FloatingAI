@@ -29,8 +29,8 @@ const SETTINGS_WIDTH: f64 = 460.0;
 const SETTINGS_HEIGHT: f64 = 560.0;
 const EXPAND_DURATION: Duration = Duration::from_millis(280);
 const COLLAPSE_DURATION: Duration = Duration::from_millis(180);
-const FRAME_DURATION: Duration = Duration::from_millis(8);
 
+const FRAME_DURATION: Duration = Duration::from_millis(8);
 static ANIMATION_GENERATION: AtomicU64 = AtomicU64::new(0);
 static MOVE_PERSISTENCE_GENERATION: AtomicU64 = AtomicU64::new(0);
 const MOVE_PERSISTENCE_DELAY: Duration = Duration::from_millis(120);
@@ -194,6 +194,8 @@ impl AnimationOutcome {
     }
 }
 
+
+
 fn animation_outcome(generation: u64, current_generation: u64) -> AnimationOutcome {
     if generation == current_generation {
         AnimationOutcome::Completed
@@ -315,43 +317,60 @@ fn finish_reserved_toggle(reservation: ToggleReservation, successful_mode: Optio
 
 async fn animate_window_bounds(
     window: &WebviewWindow,
+    start: WindowBounds,
     target: WindowBounds,
     duration: Duration,
     reduced_motion: bool,
 ) -> tauri::Result<AnimationOutcome> {
-    let generation = ANIMATION_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
-    let start = current_bounds(window)?;
 
     if let TransitionPlan::Direct([exact_target]) = transition_plan(reduced_motion, target) {
         set_window_bounds(window, exact_target)?;
         return Ok(AnimationOutcome::Completed);
     }
 
-    let started = Instant::now();
-    loop {
-        let outcome = animation_outcome(generation, ANIMATION_GENERATION.load(Ordering::SeqCst));
-        if !outcome.should_finish_transition() {
-            return Ok(outcome);
+    let generation = ANIMATION_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
+
+    #[cfg(windows)]
+    {
+        let hwnd = window.hwnd()?.0 as isize;
+        return tauri::async_runtime::spawn_blocking(move || {
+            let started = Instant::now();
+            loop {
+                if ANIMATION_GENERATION.load(Ordering::SeqCst) != generation {
+                    return Ok(AnimationOutcome::Cancelled);
+                }
+                let elapsed = started.elapsed().as_secs_f64();
+                let raw = (elapsed / duration.as_secs_f64()).min(1.0);
+                let p = ease_out_cubic(raw);
+                let x = interpolate_i32(start.position.x, target.position.x, p);
+                let y = interpolate_i32(start.position.y, target.position.y, p);
+                let w = interpolate_u32(start.size.width, target.size.width, p) as i32;
+                let h = interpolate_u32(start.size.height, target.size.height, p) as i32;
+                let r = unsafe { SetWindowPos(hwnd as _, std::ptr::null_mut(), x, y, w, h, SWP_NOACTIVATE | SWP_NOZORDER) };
+                if r == 0 { return Err(tauri::Error::Io(std::io::Error::last_os_error())); }
+                if raw >= 1.0 { return Ok(AnimationOutcome::Completed); }
+                std::thread::sleep(Duration::from_millis(4));
+            }
+        })
+        .await
+        .map_err(|e| tauri::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?
+    }
+
+    #[cfg(not(windows))]
+    {
+        let started = Instant::now();
+        loop {
+            let outcome = animation_outcome(generation, ANIMATION_GENERATION.load(Ordering::SeqCst));
+            if !outcome.should_finish_transition() { return Ok(outcome); }
+            let raw = (started.elapsed().as_secs_f64() / duration.as_secs_f64()).min(1.0);
+            let p = ease_out_cubic(raw);
+            set_window_bounds(window, WindowBounds {
+                position: PhysicalPosition::new(interpolate_i32(start.position.x, target.position.x, p), interpolate_i32(start.position.y, target.position.y, p)),
+                size: PhysicalSize::new(interpolate_u32(start.size.width, target.size.width, p), interpolate_u32(start.size.height, target.size.height, p)),
+            })?;
+            if raw >= 1.0 { return Ok(AnimationOutcome::Completed); }
+            tokio::time::sleep(FRAME_DURATION).await;
         }
-        let raw_progress = (started.elapsed().as_secs_f64() / duration.as_secs_f64()).min(1.0);
-        let progress = ease_out_cubic(raw_progress);
-        set_window_bounds(
-            window,
-            WindowBounds {
-                position: PhysicalPosition::new(
-                    interpolate_i32(start.position.x, target.position.x, progress),
-                    interpolate_i32(start.position.y, target.position.y, progress),
-                ),
-                size: PhysicalSize::new(
-                    interpolate_u32(start.size.width, target.size.width, progress),
-                    interpolate_u32(start.size.height, target.size.height, progress),
-                ),
-            },
-        )?;
-        if raw_progress >= 1.0 {
-            return Ok(AnimationOutcome::Completed);
-        }
-        tokio::time::sleep(FRAME_DURATION).await;
     }
 }
 
@@ -434,8 +453,9 @@ pub async fn resize_response_panel(
     let Some(window) = app.get_webview_window(FLOATING_LABEL) else {
         return Err(tauri::Error::WindowNotFound);
     };
+    let current = current_bounds(&window)?;
     let target = surface_geometry(&window)?.response_bounds(content_height);
-    let outcome = animate_window_bounds(&window, target, EXPAND_DURATION, reduced_motion).await?;
+    let outcome = animate_window_bounds(&window, current, target, EXPAND_DURATION, reduced_motion).await?;
     if let Some(mode) = completed_mode(WindowMode::Response, outcome) {
         set_window_mode(mode);
     }
@@ -471,7 +491,7 @@ async fn show_bottom_anchored(
     window.set_resizable(false)?;
     window.emit("surface://changed", "chat")?;
     window.show()?;
-    let outcome = animate_window_bounds(&window, target, EXPAND_DURATION, reduced_motion).await?;
+    let outcome = animate_window_bounds(&window, current, target, EXPAND_DURATION, reduced_motion).await?;
     if outcome.should_finish_transition() {
         window.set_focus()?;
     }
@@ -497,7 +517,7 @@ pub async fn show_floating_ball(app: &AppHandle, reduced_motion: bool) -> tauri:
     let size = logical_size(&window, FLOATING_SIZE, FLOATING_SIZE)?;
     let target = WindowBounds { position: current.position, size };
     window.set_resizable(false)?;
-    let outcome = animate_window_bounds(&window, target, COLLAPSE_DURATION, reduced_motion).await?;
+    let outcome = animate_window_bounds(&window, current, target, COLLAPSE_DURATION, reduced_motion).await?;
     if !outcome.should_finish_transition() {
         return Ok(());
     }
@@ -516,11 +536,12 @@ pub async fn show_settings_panel(app: &AppHandle, reduced_motion: bool) -> tauri
         return Err(tauri::Error::WindowNotFound);
     };
     apply_always_on_top(app, &window);
-    let target = surface_geometry(&window)?.settings_bounds(current_bounds(&window)?);
+    let current = current_bounds(&window)?;
+    let target = surface_geometry(&window)?.settings_bounds(current);
     window.set_resizable(false)?;
     window.emit("surface://changed", "settings")?;
     window.show()?;
-    let outcome = animate_window_bounds(&window, target, EXPAND_DURATION, reduced_motion).await?;
+    let outcome = animate_window_bounds(&window, current, target, EXPAND_DURATION, reduced_motion).await?;
     if outcome.should_finish_transition() {
         window.set_focus()?;
         set_window_mode(WindowMode::Settings);
