@@ -333,22 +333,27 @@ async fn animate_window_bounds(
     #[cfg(windows)]
     {
         let hwnd = window.hwnd()?.0 as isize;
-        let started = Instant::now();
-        loop {
-            let outcome = animation_outcome(generation, ANIMATION_GENERATION.load(Ordering::SeqCst));
-            if !outcome.should_finish_transition() { return Ok(outcome); }
-            let elapsed = started.elapsed().as_secs_f64();
-            let raw = (elapsed / duration.as_secs_f64()).min(1.0);
-            let p = ease_out_cubic(raw);
-            let x = interpolate_i32(start.position.x, target.position.x, p);
-            let y = interpolate_i32(start.position.y, target.position.y, p);
-            let w = interpolate_u32(start.size.width, target.size.width, p) as i32;
-            let h = interpolate_u32(start.size.height, target.size.height, p) as i32;
-            let r = unsafe { SetWindowPos(hwnd as _, std::ptr::null_mut(), x, y, w, h, SWP_NOACTIVATE | SWP_NOZORDER) };
-            if r == 0 { return Err(tauri::Error::Io(std::io::Error::last_os_error())); }
-            if raw >= 1.0 { return Ok(AnimationOutcome::Completed); }
-            tokio::time::sleep(Duration::from_millis(8)).await;
-        }
+        return tauri::async_runtime::spawn_blocking(move || {
+            let started = Instant::now();
+            loop {
+                if ANIMATION_GENERATION.load(Ordering::SeqCst) != generation {
+                    return Ok(AnimationOutcome::Cancelled);
+                }
+                let elapsed = started.elapsed().as_secs_f64();
+                let raw = (elapsed / duration.as_secs_f64()).min(1.0);
+                let p = ease_out_cubic(raw);
+                let x = interpolate_i32(start.position.x, target.position.x, p);
+                let y = interpolate_i32(start.position.y, target.position.y, p);
+                let w = interpolate_u32(start.size.width, target.size.width, p) as i32;
+                let h = interpolate_u32(start.size.height, target.size.height, p) as i32;
+                let r = unsafe { SetWindowPos(hwnd as _, std::ptr::null_mut(), x, y, w, h, SWP_NOACTIVATE | SWP_NOZORDER) };
+                if r == 0 { return Err(tauri::Error::Io(std::io::Error::last_os_error())); }
+                if raw >= 1.0 { return Ok(AnimationOutcome::Completed); }
+                std::thread::sleep(Duration::from_millis(16));
+            }
+        })
+        .await
+        .map_err(|e| tauri::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?
     }
 
     #[cfg(not(windows))]
