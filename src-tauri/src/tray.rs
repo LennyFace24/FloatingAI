@@ -23,7 +23,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                 windows::request_show_floating_ball(app);
             }
             "settings" => {
-                let _ = windows::show_settings_panel(app);
+                let _ = windows::show_settings_panel(app, false);
             }
             "hide" => {
                 let _ = windows::hide_all_windows(app);

@@ -33,7 +33,7 @@ export const commands = {
     invoke<void>('show_response_panel', { contentHeight, reducedMotion }),
   showChatPanel: (reducedMotion = false) => invoke<void>('show_chat_panel', { reducedMotion }),
   showFloatingBall: (reducedMotion = false) => invoke<void>('show_floating_ball', { reducedMotion }),
-  showSettingsPanel: () => invoke<void>('show_settings_panel'),
+  showSettingsPanel: (reducedMotion = false) => invoke<void>('show_settings_panel', { reducedMotion }),
   hideAllWindows: () => invoke<void>('hide_all_windows'),
   getSettings: () => invoke<AppSettings>('get_settings'),
   saveSettings: (settings: SaveSettingsInput) => invoke<AppSettings>('save_settings', { settings }),

@@ -108,7 +108,7 @@ export default function App() {
   async function openSettings() {
     const settings = await commands.getSettings().catch(() => null);
     setSettingsForm(settings ? settingsFormFromPublic(settings) : defaultSettingsForm);
-    await commands.showSettingsPanel();
+    await commands.showSettingsPanel(prefersReducedMotion());
     setSurface('settings');
   }
 

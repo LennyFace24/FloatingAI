@@ -272,7 +272,7 @@ describe('App assistant surface state flow', () => {
     render(<App />);
     await openAssistant();
 
-    await user.click(screen.getByRole('button', { name: '打开设置' }));
+    await user.click(screen.getAllByRole('button', { name: '打开设置' })[0]);
     expect(await screen.findByLabelText('Base URL')).toHaveValue('https://api.example.com/v1');
     expect(screen.getByLabelText('模型名')).toHaveValue('gpt-test');
     expect(screen.getByLabelText('全局快捷键')).toHaveValue('Ctrl+Shift+Space');
@@ -296,12 +296,12 @@ describe('App assistant surface state flow', () => {
     render(<App />);
     await openAssistant();
 
-    await user.click(screen.getByRole('button', { name: '打开设置' }));
+    await user.click(screen.getAllByRole('button', { name: '打开设置' })[0]);
     expect(await screen.findByRole('region', { name: '设置' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '关闭设置' }));
     await waitFor(() => expect(mocks.showPromptBar).toHaveBeenCalledTimes(2));
 
-    await user.click(screen.getByRole('button', { name: '收起' }));
+    await user.click(screen.getAllByRole('button', { name: '收起' })[0]);
     await waitFor(() => expect(mocks.showFloatingBall).toHaveBeenCalledOnce());
     expect(await screen.findByRole('button', { name: '打开 AI 对话' })).toBeInTheDocument();
   });

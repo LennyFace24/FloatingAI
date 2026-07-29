@@ -66,8 +66,10 @@ async fn show_floating_ball(app: tauri::AppHandle, reduced_motion: bool) -> Resu
 }
 
 #[tauri::command]
-fn show_settings_panel(app: tauri::AppHandle) -> Result<(), String> {
-    windows::show_settings_panel(&app).map_err(|error| error.to_string())
+async fn show_settings_panel(app: tauri::AppHandle, reduced_motion: bool) -> Result<(), String> {
+    windows::show_settings_panel(&app, reduced_motion)
+        .await
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]

@@ -59,12 +59,13 @@ describe('AssistantPanel', () => {
     });
   });
 
-  it('renders one prompt input surface without an empty message list', () => {
+  it('renders one prompt input surface with visible settings and collapse actions', () => {
     render(<AssistantPanel conversation={idle} {...callbacks} />);
     expect(screen.getAllByLabelText('输入问题')).toHaveLength(1);
     expect(screen.queryByRole('log')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '打开设置' })).toHaveAttribute('title', '设置');
-    expect(screen.getByRole('button', { name: '收起' })).toHaveAttribute('title', '收起为悬浮球');
+    const composer = screen.getByLabelText('输入问题').closest('form');
+    expect(composer).toContainElement(screen.getAllByRole('button', { name: '打开设置' }).find((button) => composer?.contains(button)) ?? null);
+    expect(composer).toContainElement(screen.getAllByRole('button', { name: '收起' }).find((button) => composer?.contains(button)) ?? null);
   });
 
   it('renders only a labelled loading stop ball while waiting', async () => {

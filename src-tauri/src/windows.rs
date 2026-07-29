@@ -216,6 +216,7 @@ fn transition_plan(reduced_motion: bool, target: WindowBounds) -> TransitionPlan
     }
 }
 
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 enum WindowMode {
@@ -497,18 +498,20 @@ pub async fn show_floating_ball(app: &AppHandle, reduced_motion: bool) -> tauri:
     Ok(())
 }
 
-pub fn show_settings_panel(app: &AppHandle) -> tauri::Result<()> {
+pub async fn show_settings_panel(app: &AppHandle, reduced_motion: bool) -> tauri::Result<()> {
     cancel_window_animation();
     let Some(window) = app.get_webview_window(FLOATING_LABEL) else {
         return Err(tauri::Error::WindowNotFound);
     };
     let target = surface_geometry(&window)?.settings_bounds(current_bounds(&window)?);
-    set_window_bounds(&window, target)?;
     window.set_resizable(false)?;
     window.emit("surface://changed", "settings")?;
     window.show()?;
-    window.set_focus()?;
-    set_window_mode(WindowMode::Settings);
+    let outcome = animate_window_bounds(&window, target, EXPAND_DURATION, reduced_motion).await?;
+    if outcome.should_finish_transition() {
+        window.set_focus()?;
+        set_window_mode(WindowMode::Settings);
+    }
     Ok(())
 }
 
@@ -757,6 +760,16 @@ mod tests {
         assert_eq!(bounds.position.x, -900);
         assert_eq!(bounds.size.width, 600);
     }
+    #[test]
+    fn settings_transition_animates_unless_reduced_motion_is_requested() {
+        let target = WindowBounds {
+            position: PhysicalPosition::new(120, 80),
+            size: PhysicalSize::new(460, 560),
+        };
+        assert_eq!(transition_plan(false, target), TransitionPlan::Interpolated);
+        assert_eq!(transition_plan(true, target), TransitionPlan::Direct([target]));
+    }
+
     #[test]
     fn settings_bounds_clamp_bottom_and_right_edges() {
         let current = WindowBounds {

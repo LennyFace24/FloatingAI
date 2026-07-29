@@ -115,6 +115,16 @@ export function AssistantPanel({
               <Trash2 size={15} />
             </IconButton>
           ) : null}
+          {phase === 'prompt' ? (
+            <>
+              <IconButton label="打开设置" tooltip="设置" onClick={onOpenSettings}>
+                <Wrench size={16} />
+              </IconButton>
+              <IconButton label="收起" tooltip="收起为悬浮球" onClick={onCollapse}>
+                <Minus size={17} />
+              </IconButton>
+            </>
+          ) : null}
           {isStreaming && conversation.activeRequestId ? (
             <IconButton
               className="primary-action"
