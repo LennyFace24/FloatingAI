@@ -277,7 +277,7 @@ describe('App assistant surface state flow', () => {
     expect(screen.getByLabelText('模型名')).toHaveValue('gpt-test');
     expect(screen.getByLabelText('全局快捷键')).toHaveValue('Ctrl+Shift+Space');
     expect(screen.getByRole('checkbox', { name: '开机自启' })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: '悬浮球置顶' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: '始终置顶' })).not.toBeChecked();
 
     await user.click(screen.getByRole('button', { name: '保存设置' }));
     await waitFor(() => expect(mocks.saveSettings).toHaveBeenCalledWith({

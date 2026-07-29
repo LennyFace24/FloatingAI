@@ -67,35 +67,38 @@ struct SurfaceGeometry {
 }
 
 impl SurfaceGeometry {
-    fn bottom_anchored_bounds(self, logical_width: f64, logical_height: f64) -> WindowBounds {
-        let requested_width = (logical_width * self.scale_factor).round() as u32;
-        let width = requested_width.min(self.work_area_size.width);
-        let height = (logical_height * self.scale_factor).round() as u32;
-        let bottom_gap = (BOTTOM_GAP * self.scale_factor).round() as i32;
-        let position = PhysicalPosition::new(
-            self.work_area_position.x + (self.work_area_size.width - width) as i32 / 2,
-            self.work_area_position.y + self.work_area_size.height as i32 - bottom_gap
-                - height as i32,
+    fn centered_bounds(self, current: WindowBounds, logical_width: f64, logical_height: f64) -> WindowBounds {
+        let scale = self.scale_factor;
+        let width = ((logical_width * scale).round() as u32).min(self.work_area_size.width);
+        let height = (logical_height * scale).round() as u32;
+        let current_center = (
+            current.position.x + current.size.width as i32 / 2,
+            current.position.y + current.size.height as i32 / 2,
         );
+        let max_x = self.work_area_position.x + self.work_area_size.width as i32 - width as i32;
+        let max_y = self.work_area_position.y + self.work_area_size.height as i32 - height as i32;
         WindowBounds {
-            position,
+            position: PhysicalPosition::new(
+                (current_center.0 - width as i32 / 2)
+                    .clamp(self.work_area_position.x, max_x),
+                (current_center.1 - height as i32 / 2)
+                    .clamp(self.work_area_position.y, max_y),
+            ),
             size: PhysicalSize::new(width, height),
         }
     }
 
-    fn prompt_bounds(self) -> WindowBounds {
-        self.bottom_anchored_bounds(SURFACE_WIDTH, PROMPT_HEIGHT)
-    }
 
-    fn waiting_bounds(self) -> WindowBounds {
-        self.bottom_anchored_bounds(WAITING_SIZE, WAITING_SIZE)
-    }
 
     fn response_bounds(self, content_height: f64) -> WindowBounds {
-        self.bottom_anchored_bounds(
-            SURFACE_WIDTH,
-            content_height.clamp(RESPONSE_MIN_HEIGHT, RESPONSE_MAX_HEIGHT),
-        )
+        let width = ((SURFACE_WIDTH * self.scale_factor).round() as u32).min(self.work_area_size.width);
+        let height = (content_height.clamp(RESPONSE_MIN_HEIGHT, RESPONSE_MAX_HEIGHT) * self.scale_factor).round() as u32;
+        let bottom_gap = (BOTTOM_GAP * self.scale_factor).round() as i32;
+        let position = PhysicalPosition::new(
+            self.work_area_position.x + (self.work_area_size.width - width) as i32 / 2,
+            self.work_area_position.y + self.work_area_size.height as i32 - bottom_gap - height as i32,
+        );
+        WindowBounds { position, size: PhysicalSize::new(width, height) }
     }
     fn settings_bounds(self, current: WindowBounds) -> WindowBounds {
         let width = ((SETTINGS_WIDTH * self.scale_factor).round() as u32)
@@ -410,14 +413,14 @@ pub async fn start_floating_drag(app: &AppHandle) -> Result<(), String> {
     }
 }
 pub async fn show_prompt_bar(app: &AppHandle, reduced_motion: bool) -> tauri::Result<()> {
-    let outcome = show_bottom_anchored(app, |geometry| geometry.prompt_bounds(), reduced_motion).await?;
+    let outcome = show_bottom_anchored(app, reduced_motion, SURFACE_WIDTH, PROMPT_HEIGHT).await?;
     if let Some(mode) = completed_mode(WindowMode::Prompt, outcome) {
         set_window_mode(mode);
     }
     Ok(())
 }
 pub async fn show_waiting_ball(app: &AppHandle, reduced_motion: bool) -> tauri::Result<()> {
-    let outcome = show_bottom_anchored(app, |geometry| geometry.waiting_bounds(), reduced_motion).await?;
+    let outcome = show_bottom_anchored(app, reduced_motion, WAITING_SIZE, WAITING_SIZE).await?;
     if let Some(mode) = completed_mode(WindowMode::Waiting, outcome) {
         set_window_mode(mode);
     }
@@ -452,15 +455,19 @@ pub async fn show_response_panel(
     window.show()?;
     resize_response_panel(app, content_height, reduced_motion).await
 }
-async fn show_bottom_anchored<F: FnOnce(SurfaceGeometry) -> WindowBounds>(
+async fn show_bottom_anchored(
     app: &AppHandle,
-    bounds: F,
     reduced_motion: bool,
+    logical_width: f64,
+    logical_height: f64,
 ) -> tauri::Result<AnimationOutcome> {
     let Some(window) = app.get_webview_window(FLOATING_LABEL) else {
         return Err(tauri::Error::WindowNotFound);
     };
-    let target = bounds(surface_geometry(&window)?);
+    let geometry = surface_geometry(&window)?;
+    let current = current_bounds(&window)?;
+    let target = geometry.centered_bounds(current, logical_width, logical_height);
+    apply_always_on_top(app, &window);
     window.set_resizable(false)?;
     window.emit("surface://changed", "chat")?;
     window.show()?;
@@ -473,6 +480,13 @@ async fn show_bottom_anchored<F: FnOnce(SurfaceGeometry) -> WindowBounds>(
 
 pub async fn show_chat_panel(app: &AppHandle, reduced_motion: bool) -> tauri::Result<()> {
     show_prompt_bar(app, reduced_motion).await
+}
+
+fn apply_always_on_top(app: &AppHandle, window: &WebviewWindow) {
+    let always_on_top = settings::load_settings(app)
+        .map(|stored| stored.floating_always_on_top)
+        .unwrap_or(false);
+    let _ = window.set_always_on_top(always_on_top);
 }
 
 pub async fn show_floating_ball(app: &AppHandle, reduced_motion: bool) -> tauri::Result<()> {
@@ -488,10 +502,7 @@ pub async fn show_floating_ball(app: &AppHandle, reduced_motion: bool) -> tauri:
         return Ok(());
     }
     window.emit("surface://changed", "floating")?;
-    let always_on_top = settings::load_settings(app)
-        .map(|stored| stored.floating_always_on_top)
-        .unwrap_or(true);
-    window.set_always_on_top(always_on_top)?;
+    apply_always_on_top(app, &window);
     window.show()?;
     window.set_focus()?;
     set_window_mode(WindowMode::Floating);
@@ -500,9 +511,11 @@ pub async fn show_floating_ball(app: &AppHandle, reduced_motion: bool) -> tauri:
 
 pub async fn show_settings_panel(app: &AppHandle, reduced_motion: bool) -> tauri::Result<()> {
     cancel_window_animation();
+
     let Some(window) = app.get_webview_window(FLOATING_LABEL) else {
         return Err(tauri::Error::WindowNotFound);
     };
+    apply_always_on_top(app, &window);
     let target = surface_geometry(&window)?.settings_bounds(current_bounds(&window)?);
     window.set_resizable(false)?;
     window.emit("surface://changed", "settings")?;
@@ -700,25 +713,24 @@ mod tests {
 
     #[test]
     fn bottom_anchored_prompt_at_1x() {
-        let bounds = geometry(1.0).prompt_bounds();
-        assert_eq!(bounds.position, PhysicalPosition::new(740, 1000));
-        assert_eq!(bounds.size, PhysicalSize::new(640, 58));
+        let bounds = geometry(1.0).centered_bounds(WindowBounds { position: PhysicalPosition::new(400, 300), size: PhysicalSize::new(50, 50) }, 640.0, 58.0);
+        assert_eq!(bounds.position, PhysicalPosition::new(105, 296));
     }
 
     #[test]
     fn bottom_anchored_modes_at_1_5x() {
         let geometry = geometry(1.5);
         assert_eq!(
-            geometry.prompt_bounds(),
+            geometry.centered_bounds(WindowBounds { position: PhysicalPosition::new(400, 300), size: PhysicalSize::new(50, 50) }, 640.0, 58.0),
             WindowBounds {
-                position: PhysicalPosition::new(580, 935),
+                position: PhysicalPosition::new(100, 282),
                 size: PhysicalSize::new(960, 87),
             }
         );
         assert_eq!(
-            geometry.waiting_bounds(),
+            geometry.centered_bounds(WindowBounds { position: PhysicalPosition::new(400, 300), size: PhysicalSize::new(50, 50) }, 50.0, 50.0),
             WindowBounds {
-                position: PhysicalPosition::new(1022, 947),
+                position: PhysicalPosition::new(388, 288),
                 size: PhysicalSize::new(75, 75),
             }
         );
@@ -756,7 +768,7 @@ mod tests {
             work_area_size: PhysicalSize::new(600, 800),
             scale_factor: 1.0,
         };
-        let bounds = geometry.prompt_bounds();
+        let bounds = geometry.centered_bounds(WindowBounds { position: PhysicalPosition::new(-800, 400), size: PhysicalSize::new(50, 50) }, 640.0, 58.0);
         assert_eq!(bounds.position.x, -900);
         assert_eq!(bounds.size.width, 600);
     }

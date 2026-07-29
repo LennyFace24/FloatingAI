@@ -104,7 +104,7 @@ export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPane
             checked={form.floatingAlwaysOnTop}
             onChange={(event) => setForm({ ...form, floatingAlwaysOnTop: event.currentTarget.checked })}
           />
-          悬浮球置顶
+          始终置顶
         </label>
 
         {saveError ? <p className="field-error" role="alert">{saveError}</p> : null}

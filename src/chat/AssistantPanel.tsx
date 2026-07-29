@@ -95,6 +95,7 @@ export function AssistantPanel({
       onSubmit={handleSubmit}
     >
       <div className="composer">
+
         <textarea
           ref={inputRef}
           aria-label="输入问题"
@@ -103,7 +104,14 @@ export function AssistantPanel({
           onChange={(event) => setInput(event.currentTarget.value)}
           rows={phase === 'prompt' ? 1 : 2}
           disabled={isStreaming}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault();
+              handleSubmit(event as unknown as FormEvent);
+            }
+          }}
         />
+
         <div className="composer-actions">
           {phase === 'response' ? (
             <IconButton

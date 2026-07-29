@@ -19,7 +19,7 @@
         "decorations": false,
         "transparent": true,
         "shadow": false,
-        "alwaysOnTop": true,
+        "alwaysOnTop": false,
         "resizable": false,
         "skipTaskbar": true,
         "url": "index.html"
