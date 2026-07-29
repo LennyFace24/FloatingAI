@@ -11,7 +11,7 @@ use windows_sys::Win32::{
     UI::{
         Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON},
         WindowsAndMessaging::{
-            GetCursorPos, GetWindowRect, SetWindowPos, SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER,
+            GetCursorPos, GetWindowRect, SetWindowPos, SWP_ASYNCWINDOWPOS, SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER,
         },
     },
 };
@@ -346,7 +346,7 @@ async fn animate_window_bounds(
                 let y = interpolate_i32(start.position.y, target.position.y, p);
                 let w = interpolate_u32(start.size.width, target.size.width, p) as i32;
                 let h = interpolate_u32(start.size.height, target.size.height, p) as i32;
-                let r = unsafe { SetWindowPos(hwnd as _, std::ptr::null_mut(), x, y, w, h, SWP_NOACTIVATE | SWP_NOZORDER) };
+                let r = unsafe { SetWindowPos(hwnd as _, std::ptr::null_mut(), x, y, w, h, SWP_NOACTIVATE | SWP_NOZORDER | SWP_ASYNCWINDOWPOS) };
                 if r == 0 { return Err(tauri::Error::Io(std::io::Error::last_os_error())); }
                 if raw >= 1.0 { return Ok(AnimationOutcome::Completed); }
                 std::thread::sleep(Duration::from_millis(4));
