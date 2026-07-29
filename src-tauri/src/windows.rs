@@ -484,9 +484,9 @@ async fn show_bottom_anchored(
     let target = geometry.centered_bounds(current, logical_width, logical_height);
     apply_always_on_top(app, &window);
     window.set_resizable(false)?;
+    let outcome = animate_window_bounds(&window, current, target, EXPAND_DURATION, reduced_motion).await?;
     window.emit("surface://changed", "chat")?;
     window.show()?;
-    let outcome = animate_window_bounds(&window, current, target, EXPAND_DURATION, reduced_motion).await?;
     if outcome.should_finish_transition() {
         window.set_focus()?;
     }
