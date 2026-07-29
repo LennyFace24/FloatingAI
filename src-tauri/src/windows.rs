@@ -349,7 +349,7 @@ async fn animate_window_bounds(
                 let r = unsafe { SetWindowPos(hwnd as _, std::ptr::null_mut(), x, y, w, h, SWP_NOACTIVATE | SWP_NOZORDER) };
                 if r == 0 { return Err(tauri::Error::Io(std::io::Error::last_os_error())); }
                 if raw >= 1.0 { return Ok(AnimationOutcome::Completed); }
-                std::thread::sleep(Duration::from_millis(16));
+                std::thread::sleep(Duration::from_millis(4));
             }
         })
         .await
