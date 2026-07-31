@@ -470,10 +470,18 @@ pub async fn show_response_panel(
     let Some(window) = app.get_webview_window(FLOATING_LABEL) else {
         return Err(tauri::Error::WindowNotFound);
     };
+    let from_settings = current_window_mode() == WindowMode::Settings;
     window.set_resizable(false)?;
-    window.emit("surface://changed", "chat")?;
-    window.show()?;
-    resize_response_panel(app, content_height, reduced_motion).await
+    if !from_settings {
+        window.emit("surface://changed", "chat")?;
+        window.show()?;
+    }
+    resize_response_panel(app, content_height, reduced_motion).await?;
+    if from_settings {
+        window.emit("surface://changed", "chat")?;
+        window.show()?;
+    }
+    Ok(())
 }
 async fn show_bottom_anchored(
     app: &AppHandle,
@@ -487,12 +495,19 @@ async fn show_bottom_anchored(
     let geometry = surface_geometry(&window)?;
     let current = current_bounds(&window)?;
     let target = geometry.centered_bounds(current, logical_width, logical_height);
+    let from_settings = current_window_mode() == WindowMode::Settings;
     apply_always_on_top(app, &window);
     window.set_resizable(false)?;
-    window.emit("surface://changed", "chat")?;
-    window.show()?;
+    if !from_settings {
+        window.emit("surface://changed", "chat")?;
+        window.show()?;
+    }
     let outcome = animate_window_bounds(&window, current, target, EXPAND_DURATION, reduced_motion).await?;
     if outcome.should_finish_transition() {
+        if from_settings {
+            window.emit("surface://changed", "chat")?;
+            window.show()?;
+        }
         window.set_focus()?;
     }
     Ok(outcome)
