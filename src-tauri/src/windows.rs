@@ -11,7 +11,7 @@ use windows_sys::Win32::{
     UI::{
         Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON},
         WindowsAndMessaging::{
-            GetCursorPos, GetWindowRect, SetWindowPos, SWP_ASYNCWINDOWPOS, SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER,
+            GetCursorPos, GetWindowRect, SetWindowPos, SWP_ASYNCWINDOWPOS, SWP_NOACTIVATE, SWP_NOCOPYBITS, SWP_NOSIZE, SWP_NOZORDER,
         },
     },
 };
@@ -348,7 +348,26 @@ async fn animate_window_bounds(
                 let h = interpolate_u32(start.size.height, target.size.height, p) as i32;
                 let r = unsafe { SetWindowPos(hwnd as _, std::ptr::null_mut(), x, y, w, h, SWP_NOACTIVATE | SWP_NOZORDER | SWP_ASYNCWINDOWPOS) };
                 if r == 0 { return Err(tauri::Error::Io(std::io::Error::last_os_error())); }
-                if raw >= 1.0 { return Ok(AnimationOutcome::Completed); }
+                if raw >= 1.0 {
+                    // 收尾：同步 SetWindowPos（不带 SWP_ASYNCWINDOWPOS），阻塞等待 UI 线程
+                    // 处理完动画期间积压的 WM_SIZE 消息，使 WebView2 子窗口 bounds 与父窗口
+                    // 最终尺寸对齐；SWP_NOCOPYBITS 丢弃客户区位图复制，新扩展区域立即重绘。
+                    let r = unsafe {
+                        SetWindowPos(
+                            hwnd as _,
+                            std::ptr::null_mut(),
+                            target.position.x,
+                            target.position.y,
+                            target.size.width as i32,
+                            target.size.height as i32,
+                            SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOCOPYBITS,
+                        )
+                    };
+                    if r == 0 {
+                        return Err(tauri::Error::Io(std::io::Error::last_os_error()));
+                    }
+                    return Ok(AnimationOutcome::Completed);
+                }
                 std::thread::sleep(Duration::from_millis(4));
             }
         })
