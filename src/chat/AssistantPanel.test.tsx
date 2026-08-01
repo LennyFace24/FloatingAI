@@ -5,6 +5,7 @@ import { AssistantPanel } from './AssistantPanel';
 import type { ConversationState } from './conversation';
 
 const idle: ConversationState = { status: 'idle', messages: [] };
+const promptPhase: ConversationState = idle;
 const callbacks = {
   onSend: vi.fn(() => Promise.resolve('req-2')),
   onStop: vi.fn(() => Promise.resolve()),
@@ -198,5 +199,10 @@ describe('AssistantPanel', () => {
     render(<AssistantPanel conversation={conversation} {...callbacks} onCollapse={onCollapse} />);
     await user.keyboard('{Escape}');
     expect(onCollapse).toHaveBeenCalledOnce();
+  });
+
+  it('renders a mic button that starts live voice input', async () => {
+    render(<AssistantPanel conversation={promptPhase} {...callbacks} />);
+    expect(screen.getByRole('button', { name: '语音输入' })).toBeInTheDocument();
   });
 });

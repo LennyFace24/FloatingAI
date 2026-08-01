@@ -1,5 +1,7 @@
 export {
   ArrowUp,
+  Mic,
+  MicOff,
   Check,
   Copy,
   Minus,

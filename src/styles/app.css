@@ -165,6 +165,11 @@ button { color: inherit; }
 }
 .icon-button.primary-action:hover:not(:disabled) { background: #fff; color: #050505; }
 
+.icon-button.voice-active { color: #ff6b6b; border-color: #7a3a3a; }
+.voice-active .waiting-indicator { animation: voice-pulse 1.2s ease-in-out infinite; }
+@keyframes voice-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+.voice-error { margin: 0; padding: 4px 12px; color: #ff6b6b; font-size: 11px; }
+
 .message-list {
   min-height: 0;
   overflow-y: auto;
