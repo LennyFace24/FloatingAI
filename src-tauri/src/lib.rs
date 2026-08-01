@@ -143,7 +143,7 @@ fn allow_microphone_permission(app: &tauri::App) {
         unsafe {
             use webview2_com::Microsoft::Web::WebView2::Win32::{
                 COREWEBVIEW2_PERMISSION_KIND, COREWEBVIEW2_PERMISSION_KIND_MICROPHONE,
-                COREWEBVIEW2_PERMISSION_STATE_ALLOW,
+                COREWEBVIEW2_PERMISSION_STATE_ALLOW, COREWEBVIEW2_PERMISSION_STATE_DENY,
             };
             use webview2_com::PermissionRequestedEventHandler;
 
@@ -161,6 +161,9 @@ fn allow_microphone_permission(app: &tauri::App) {
                     args.PermissionKind(&mut kind)?;
                     if kind == COREWEBVIEW2_PERMISSION_KIND_MICROPHONE {
                         args.SetState(COREWEBVIEW2_PERMISSION_STATE_ALLOW)?;
+                        eprintln!("microphone permission granted for floating webview");
+                    } else {
+                        args.SetState(COREWEBVIEW2_PERMISSION_STATE_DENY)?;
                     }
                     Ok(())
                 })),

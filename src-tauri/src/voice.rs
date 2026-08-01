@@ -1,12 +1,17 @@
+use std::time::Duration;
+
 use crate::settings;
 
-pub fn resolve_stt_credentials(settings: &settings::StoredSettings) -> (String, Option<String>) {
-    let chat_key = settings.api_key.clone().unwrap_or_default();
-    let stt_key = settings
-        .stt_api_key
-        .clone()
-        .filter(|key| !key.is_empty());
-    (chat_key, stt_key)
+/// 返回独立配置的 STT API Key（为空视为未配置）。
+pub fn resolve_stt_credentials(settings: &settings::StoredSettings) -> Option<String> {
+    settings.stt_api_key.clone().filter(|key| !key.is_empty())
+}
+
+/// 解析语音识别使用的 API Key：优先 STT Key，回落聊天 Key；双空时返回引导性错误。
+pub fn resolve_api_key(settings: &settings::StoredSettings) -> Result<String, String> {
+    resolve_stt_credentials(settings)
+        .or_else(|| settings.api_key.clone().filter(|key| !key.is_empty()))
+        .ok_or_else(|| "请先在设置中配置 API Key 或 STT API Key".to_string())
 }
 
 pub fn stt_url(base_url: &str) -> String {
@@ -15,7 +20,7 @@ pub fn stt_url(base_url: &str) -> String {
 
 pub fn map_stt_error(status: Option<u16>, kind: &str) -> String {
     match status {
-        Some(401) => "语音识别鉴权失败，请检查 STT API Key".to_string(),
+        Some(401) => "语音识别鉴权失败，请检查 API Key".to_string(),
         Some(404) => "语音识别端点不存在，请检查 STT Base URL".to_string(),
         Some(_) => format!("语音识别服务返回错误（HTTP {}）", status.unwrap()),
         None if kind.contains("timeout") => "语音识别请求超时，请重试".to_string(),
@@ -30,9 +35,7 @@ pub async fn transcribe_audio(
     mime: String,
 ) -> Result<String, String> {
     let stored = settings::load_settings(&app)?;
-    let (_chat_key, stt_key) = resolve_stt_credentials(&stored);
-    let api_key = stt_key.or_else(|| stored.api_key.clone().filter(|k| !k.is_empty()))
-        .ok_or_else(|| "请先在设置中配置 API Key 或 STT API Key".to_string())?;
+    let api_key = resolve_api_key(&stored)?;
 
     let url = stt_url(&stored.stt_base_url);
     let client = reqwest::Client::new();
@@ -47,6 +50,7 @@ pub async fn transcribe_audio(
         .post(&url)
         .bearer_auth(&api_key)
         .multipart(form)
+        .timeout(Duration::from_secs(30))
         .send()
         .await
         .map_err(|e| map_stt_error(None, &e.to_string()))?;
@@ -54,7 +58,8 @@ pub async fn transcribe_audio(
     if !status.is_success() {
         return Err(map_stt_error(Some(status.as_u16()), ""));
     }
-    let body: serde_json::Value = response.json().await.map_err(|e| map_stt_error(None, &e.to_string()))?;
+    // 2xx 但响应体不是合法 JSON：区别于网络失败单独提示
+    let body: serde_json::Value = response.json().await.map_err(|e| format!("语音识别响应解析失败：{e}"))?;
     body.get("text")
         .and_then(|t| t.as_str())
         .map(|t| t.to_string())
@@ -73,7 +78,7 @@ mod tests {
             api_key: Some("sk-chat".to_string()),
             ..StoredSettings::default()
         };
-        assert_eq!(resolve_stt_credentials(&settings), ("sk-chat".to_string(), None));
+        assert_eq!(resolve_stt_credentials(&settings), None);
     }
 
     #[test]
@@ -83,7 +88,43 @@ mod tests {
             api_key: Some("sk-chat".to_string()),
             ..StoredSettings::default()
         };
-        assert_eq!(resolve_stt_credentials(&settings), ("sk-chat".to_string(), Some("sk-stt".to_string())));
+        assert_eq!(resolve_stt_credentials(&settings), Some("sk-stt".to_string()));
+    }
+
+    #[test]
+    fn api_key_falls_back_to_chat_key_when_stt_blank() {
+        let settings = StoredSettings {
+            stt_api_key: None,
+            api_key: Some("sk-chat".to_string()),
+            ..StoredSettings::default()
+        };
+        assert_eq!(resolve_api_key(&settings), Ok("sk-chat".to_string()));
+    }
+
+    #[test]
+    fn api_key_missing_returns_guidance_error() {
+        let settings = StoredSettings {
+            stt_api_key: None,
+            api_key: None,
+            ..StoredSettings::default()
+        };
+        assert_eq!(
+            resolve_api_key(&settings),
+            Err("请先在设置中配置 API Key 或 STT API Key".to_string())
+        );
+    }
+
+    #[test]
+    fn api_key_blank_stt_and_chat_returns_guidance_error() {
+        let settings = StoredSettings {
+            stt_api_key: Some(String::new()),
+            api_key: Some(String::new()),
+            ..StoredSettings::default()
+        };
+        assert_eq!(
+            resolve_api_key(&settings),
+            Err("请先在设置中配置 API Key 或 STT API Key".to_string())
+        );
     }
 
     #[test]
