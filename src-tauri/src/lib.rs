@@ -128,6 +128,52 @@ async fn stop_chat(
     ai::stop_chat(runtime.inner().clone(), request_id).await
 }
 
+/// WebView2 默认拦截 `getUserMedia`；为 floating 窗口注册 PermissionRequested
+/// handler，放行麦克风（COREWEBVIEW2_PERMISSION_KIND_MICROPHONE）。
+#[cfg(windows)]
+fn allow_microphone_permission(app: &tauri::App) {
+    use tauri::Manager;
+
+    let Some(webview) = app.get_webview_window(windows::FLOATING_LABEL) else {
+        eprintln!("floating webview not found; microphone permission handler not registered");
+        return;
+    };
+
+    if let Err(error) = webview.with_webview(|platform_webview| {
+        unsafe {
+            use webview2_com::Microsoft::Web::WebView2::Win32::{
+                COREWEBVIEW2_PERMISSION_KIND, COREWEBVIEW2_PERMISSION_KIND_MICROPHONE,
+                COREWEBVIEW2_PERMISSION_STATE_ALLOW,
+            };
+            use webview2_com::PermissionRequestedEventHandler;
+
+            let controller = platform_webview.controller();
+            let Ok(core) = controller.CoreWebView2() else {
+                eprintln!("failed to get ICoreWebView2 from floating webview controller");
+                return;
+            };
+
+            let mut token = 0i64;
+            if let Err(error) = core.add_PermissionRequested(
+                &PermissionRequestedEventHandler::create(Box::new(|_, args| {
+                    let Some(args) = args else { return Ok(()) };
+                    let mut kind = COREWEBVIEW2_PERMISSION_KIND::default();
+                    args.PermissionKind(&mut kind)?;
+                    if kind == COREWEBVIEW2_PERMISSION_KIND_MICROPHONE {
+                        args.SetState(COREWEBVIEW2_PERMISSION_STATE_ALLOW)?;
+                    }
+                    Ok(())
+                })),
+                &mut token,
+            ) {
+                eprintln!("failed to register microphone permission handler: {error}");
+            }
+        }
+    }) {
+        eprintln!("failed to access floating webview: {error}");
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -154,6 +200,8 @@ pub fn run() {
         ])
         .setup(|app| {
             tray::setup_tray(app.handle())?;
+            #[cfg(windows)]
+            allow_microphone_permission(app);
             windows::restore_floating_position(app.handle());
             windows::attach_floating_position_persistence(app.handle());
 

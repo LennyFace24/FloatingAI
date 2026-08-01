@@ -3665,6 +3665,7 @@ dependencies = [
  "tauri-plugin-store",
  "tokio",
  "uuid",
+ "webview2-com",
  "windows-sys 0.61.2",
 ]
 
