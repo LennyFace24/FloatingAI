@@ -137,7 +137,7 @@ export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPane
             aria-label="STT API Key"
             type="password"
             value={form.sttApiKey}
-            placeholder="留空则使用聊天 API Key"
+            placeholder="留空则保留已保存的 Key"
             onChange={(event) => setForm({ ...form, sttApiKey: event.currentTarget.value })}
           />
         </label>

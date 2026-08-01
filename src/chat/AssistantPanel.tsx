@@ -122,6 +122,7 @@ export function AssistantPanel({
           label={voiceStatus === 'recording' ? '停止录音' : '语音输入'}
           tooltip={voiceStatus === 'recording' ? '停止录音' : '语音输入'}
           className={voiceStatus === 'recording' ? 'voice-active' : undefined}
+          disabled={isStreaming}
           onClick={() => {
             setVoiceError('');
             void (voiceStatus === 'recording' ? stopVoice() : startVoice());
