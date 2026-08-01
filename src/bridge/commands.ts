@@ -7,6 +7,10 @@ export interface AppSettings {
   globalShortcut: string;
   autostartEnabled: boolean;
   floatingAlwaysOnTop: boolean;
+  sttBaseUrl: string;
+  sttModel: string;
+  sttApiKeyConfigured: boolean;
+  sttLanguage: string;
 }
 
 export interface SaveSettingsInput {
@@ -16,6 +20,10 @@ export interface SaveSettingsInput {
   globalShortcut: string;
   autostartEnabled: boolean;
   floatingAlwaysOnTop: boolean;
+  sttBaseUrl: string;
+  sttModel: string;
+  sttApiKey?: string;
+  sttLanguage: string;
 }
 
 export interface ChatMessageInput {
@@ -37,6 +45,8 @@ export const commands = {
   hideAllWindows: () => invoke<void>('hide_all_windows'),
   getSettings: () => invoke<AppSettings>('get_settings'),
   saveSettings: (settings: SaveSettingsInput) => invoke<AppSettings>('save_settings', { settings }),
+  transcribeAudio: (audio: Uint8Array, mime: string) =>
+    invoke<string>('transcribe_audio', { audio, mime }),
   startChat: (requestId: string, messages: ChatMessageInput[]) =>
     invoke<void>('start_chat', { requestId, messages }),
   stopChat: (requestId: string) => invoke<void>('stop_chat', { requestId }),

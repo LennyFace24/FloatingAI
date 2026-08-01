@@ -25,6 +25,10 @@ const mocks = vi.hoisted(() => ({
     globalShortcut: 'Alt+Space',
     autostartEnabled: false,
     floatingAlwaysOnTop: true,
+    sttBaseUrl: 'https://api.openai.com/v1',
+    sttModel: 'whisper-1',
+    sttApiKeyConfigured: false,
+    sttLanguage: 'auto',
   })),
 }));
 
@@ -268,6 +272,10 @@ describe('App assistant surface state flow', () => {
       globalShortcut: 'Ctrl+Shift+Space',
       autostartEnabled: true,
       floatingAlwaysOnTop: false,
+      sttBaseUrl: 'http://localhost:9000/v1',
+      sttModel: 'large-v3',
+      sttApiKeyConfigured: false,
+      sttLanguage: 'zh',
     });
     render(<App />);
     await openAssistant();
@@ -287,6 +295,10 @@ describe('App assistant surface state flow', () => {
       globalShortcut: 'Ctrl+Shift+Space',
       autostartEnabled: true,
       floatingAlwaysOnTop: false,
+      sttBaseUrl: 'http://localhost:9000/v1',
+      sttModel: 'large-v3',
+      sttApiKey: '',
+      sttLanguage: 'zh',
     }));
     await waitFor(() => expect(mocks.showPromptBar).toHaveBeenCalledTimes(2));
   });

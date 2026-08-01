@@ -5,6 +5,10 @@ export interface SettingsFormInput {
   globalShortcut: string;
   autostartEnabled: boolean;
   floatingAlwaysOnTop: boolean;
+  sttBaseUrl: string;
+  sttModel: string;
+  sttApiKey: string;
+  sttLanguage: string;
 }
 
 export type SettingsErrors = Partial<Record<'baseUrl' | 'model' | 'globalShortcut', string>>;
@@ -16,6 +20,10 @@ export const defaultSettingsForm: SettingsFormInput = {
   globalShortcut: 'Alt+Space',
   autostartEnabled: false,
   floatingAlwaysOnTop: true,
+  sttBaseUrl: 'https://api.openai.com/v1',
+  sttModel: 'whisper-1',
+  sttApiKey: '',
+  sttLanguage: 'auto',
 };
 
 export function normalizeSettingsForm(input: SettingsFormInput): SettingsFormInput {
@@ -26,6 +34,10 @@ export function normalizeSettingsForm(input: SettingsFormInput): SettingsFormInp
     globalShortcut: input.globalShortcut.trim(),
     autostartEnabled: input.autostartEnabled,
     floatingAlwaysOnTop: input.floatingAlwaysOnTop,
+    sttBaseUrl: input.sttBaseUrl.trim().replace(/\/$/, ''),
+    sttModel: input.sttModel.trim(),
+    sttApiKey: input.sttApiKey.trim(),
+    sttLanguage: input.sttLanguage.trim(),
   };
 }
 

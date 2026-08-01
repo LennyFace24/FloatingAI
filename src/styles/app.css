@@ -269,8 +269,10 @@ button { color: inherit; }
 .settings-form { min-height: 0; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 11px; }
 .settings-form label { display: flex; flex-direction: column; gap: 6px; color: #d4d4d4; font-size: 12px; }
 .settings-form label.checkbox-row { min-height: 40px; flex-direction: row; align-items: center; gap: 9px; }
-.settings-form input[type='text'], .settings-form input[type='password'] { min-height: 40px; padding: 0 10px; border: 1px solid #333; border-radius: 8px; background: var(--input); color: var(--text-primary); }
+.settings-form input[type='text'], .settings-form input[type='password'], .settings-form select { min-height: 40px; padding: 0 10px; border: 1px solid #333; border-radius: 8px; background: var(--input); color: var(--text-primary); }
+.settings-form select { appearance: none; -webkit-appearance: none; }
 .settings-form input[type='checkbox'] { accent-color: #d4d4d4; }
+.settings-section-title { margin: 10px 0 0; font-size: 12px; font-weight: 600; color: var(--text-muted); border-top: 1px solid #2a2a2a; padding-top: 12px; }
 .field-note, .field-error { margin: -4px 0 0; font-size: 11px; }
 .field-note { color: var(--text-muted); }.field-error { color: #d4d4d4; }
 .save-button { min-height: 40px; margin-top: 4px; border: 1px solid #ddd; border-radius: 8px; background: #ddd; color: #080808; cursor: pointer; font-weight: 600; }

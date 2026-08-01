@@ -24,6 +24,10 @@ function settingsFormFromPublic(settings: AppSettings) {
     globalShortcut: settings.globalShortcut,
     autostartEnabled: settings.autostartEnabled,
     floatingAlwaysOnTop: settings.floatingAlwaysOnTop,
+    sttBaseUrl: settings.sttBaseUrl,
+    sttModel: settings.sttModel,
+    sttApiKey: '',
+    sttLanguage: settings.sttLanguage,
   } satisfies SettingsFormInput;
 }
 

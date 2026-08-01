@@ -107,6 +107,54 @@ export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPane
           始终置顶
         </label>
 
+        <h2 className="settings-section-title">语音识别</h2>
+
+        <label>
+          STT Base URL
+          <input
+            aria-label="STT Base URL"
+            type="text"
+            value={form.sttBaseUrl}
+            placeholder="http://localhost:9000/v1"
+            onChange={(event) => setForm({ ...form, sttBaseUrl: event.currentTarget.value })}
+          />
+        </label>
+
+        <label>
+          STT 模型
+          <input
+            aria-label="STT 模型"
+            type="text"
+            value={form.sttModel}
+            placeholder="whisper-1"
+            onChange={(event) => setForm({ ...form, sttModel: event.currentTarget.value })}
+          />
+        </label>
+
+        <label>
+          STT API Key
+          <input
+            aria-label="STT API Key"
+            type="password"
+            value={form.sttApiKey}
+            placeholder="留空则使用聊天 API Key"
+            onChange={(event) => setForm({ ...form, sttApiKey: event.currentTarget.value })}
+          />
+        </label>
+
+        <label>
+          语言
+          <select
+            aria-label="转写语言"
+            value={form.sttLanguage}
+            onChange={(event) => setForm({ ...form, sttLanguage: event.currentTarget.value })}
+          >
+            <option value="auto">auto</option>
+            <option value="zh">zh</option>
+            <option value="en">en</option>
+          </select>
+        </label>
+
         {saveError ? <p className="field-error" role="alert">{saveError}</p> : null}
         <button className="save-button" type="submit" disabled={saving}>
           {saving ? '保存中' : '保存设置'}

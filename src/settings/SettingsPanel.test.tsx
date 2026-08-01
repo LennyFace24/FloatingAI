@@ -17,6 +17,10 @@ describe('SettingsPanel', () => {
           globalShortcut: 'Alt+Space',
           autostartEnabled: false,
           floatingAlwaysOnTop: true,
+          sttBaseUrl: 'https://api.openai.com/v1',
+          sttModel: 'whisper-1',
+          sttApiKey: '',
+          sttLanguage: 'auto',
         }}
         onSave={onSave}
         onClose={() => undefined}
@@ -46,6 +50,10 @@ describe('SettingsPanel', () => {
           globalShortcut: '',
           autostartEnabled: false,
           floatingAlwaysOnTop: true,
+          sttBaseUrl: 'https://api.openai.com/v1',
+          sttModel: 'whisper-1',
+          sttApiKey: '',
+          sttLanguage: 'auto',
         }}
         onSave={onSave}
         onClose={() => undefined}
