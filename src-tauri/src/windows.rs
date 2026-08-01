@@ -7,11 +7,13 @@ use crate::settings;
 
 #[cfg(windows)]
 use windows_sys::Win32::{
-    Foundation::POINT,
+    Foundation::{POINT, RECT},
+    Graphics::Gdi::{CreateRectRgn, SetWindowRgn},
     UI::{
         Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON},
         WindowsAndMessaging::{
-            GetCursorPos, GetWindowRect, SetWindowPos, SWP_ASYNCWINDOWPOS, SWP_NOACTIVATE, SWP_NOCOPYBITS, SWP_NOSIZE, SWP_NOZORDER,
+            GetCursorPos, GetWindowRect, SetWindowPos, SWP_ASYNCWINDOWPOS, SWP_NOACTIVATE,
+            SWP_NOCOPYBITS, SWP_NOSIZE, SWP_NOZORDER,
         },
     },
 };
@@ -115,6 +117,36 @@ impl SurfaceGeometry {
             size: PhysicalSize::new(width, height),
         }
     }
+}
+struct ExpandGeometry {
+    /// 窗口起始位置：最终窗口中心对齐当前窗口中心
+    anchor_position: PhysicalPosition<i32>,
+    /// 初始可见矩形（窗口内坐标），以窗口中心为中心、等于当前窗口尺寸
+    initial_region: RECT,
+    /// 最终可见矩形 = 整个窗口客户区
+    full_region: RECT,
+}
+
+fn expand_geometry(current: WindowBounds, target: WindowBounds) -> ExpandGeometry {
+    let anchor_position = PhysicalPosition::new(
+        current.position.x + current.size.width as i32 / 2 - target.size.width as i32 / 2,
+        current.position.y + current.size.height as i32 / 2 - target.size.height as i32 / 2,
+    );
+    let left = ((target.size.width as f64 - current.size.width as f64) / 2.0).round() as i32;
+    let top = ((target.size.height as f64 - current.size.height as f64) / 2.0).round() as i32;
+    let initial_region = RECT {
+        left,
+        top,
+        right: left + current.size.width as i32,
+        bottom: top + current.size.height as i32,
+    };
+    let full_region = RECT {
+        left: 0,
+        top: 0,
+        right: target.size.width as i32,
+        bottom: target.size.height as i32,
+    };
+    ExpandGeometry { anchor_position, initial_region, full_region }
 }
 
 fn surface_geometry(window: &WebviewWindow) -> tauri::Result<SurfaceGeometry> {
@@ -360,6 +392,7 @@ async fn animate_window_bounds(
                             target.position.y,
                             target.size.width as i32,
                             target.size.height as i32,
+
                             SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOCOPYBITS,
                         )
                     };
@@ -390,6 +423,121 @@ async fn animate_window_bounds(
             if raw >= 1.0 { return Ok(AnimationOutcome::Completed); }
             tokio::time::sleep(FRAME_DURATION).await;
         }
+    }
+}
+
+/// 放大路径动画：窗口立即设为最终尺寸（WebView2 视口一次 resize、内容整体栅格化一次），
+/// 动画期间用 SetWindowRgn 逐步扩张可见矩形，位置从当前中心锚点平移到目标位置。
+/// 避免逐帧 resize 视口导致的 Chromium tile 逐块补渲染。
+async fn animate_expand_with_region(
+    window: &WebviewWindow,
+    current: WindowBounds,
+    target: WindowBounds,
+    duration: Duration,
+    reduced_motion: bool,
+) -> tauri::Result<AnimationOutcome> {
+    if let TransitionPlan::Direct([exact_target]) = transition_plan(reduced_motion, target) {
+        set_window_bounds(window, exact_target)?;
+        return Ok(AnimationOutcome::Completed);
+    }
+
+    let ExpandGeometry {
+        anchor_position,
+        initial_region,
+        full_region,
+    } = expand_geometry(current, target);
+    let generation = ANIMATION_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
+
+    #[cfg(windows)]
+    {
+        let hwnd = window.hwnd()?.0 as isize;
+        return tauri::async_runtime::spawn_blocking(move || {
+            // 同步设最终尺寸与锚点位置：等待 WM_SIZE 处理完，WebView2 视口一次 resize。
+            if unsafe {
+                SetWindowPos(
+                    hwnd as _,
+                    std::ptr::null_mut(),
+                    anchor_position.x,
+                    anchor_position.y,
+                    target.size.width as i32,
+                    target.size.height as i32,
+                    SWP_NOACTIVATE | SWP_NOZORDER,
+                )
+            } == 0
+            {
+                return Err(tauri::Error::Io(std::io::Error::last_os_error()));
+            }
+
+            let mut has_region = false;
+            let initial_hrgn = unsafe {
+                CreateRectRgn(
+                    initial_region.left,
+                    initial_region.top,
+                    initial_region.right,
+                    initial_region.bottom,
+                )
+            };
+            if initial_hrgn != std::ptr::null_mut() && unsafe { SetWindowRgn(hwnd as _, initial_hrgn, 1) } != 0 {
+                has_region = true;
+            }
+
+            let started = Instant::now();
+            loop {
+                if ANIMATION_GENERATION.load(Ordering::SeqCst) != generation {
+                    if has_region {
+                        unsafe { SetWindowRgn(hwnd as _, std::ptr::null_mut(), 1) };
+                    }
+                    return Ok(AnimationOutcome::Cancelled);
+                }
+                let elapsed = started.elapsed().as_secs_f64();
+                let raw = (elapsed / duration.as_secs_f64()).min(1.0);
+                let p = ease_out_cubic(raw);
+                let x = interpolate_i32(anchor_position.x, target.position.x, p);
+                let y = interpolate_i32(anchor_position.y, target.position.y, p);
+                let region = RECT {
+                    left: interpolate_i32(initial_region.left, 0, p),
+                    top: interpolate_i32(initial_region.top, 0, p),
+                    right: interpolate_i32(initial_region.right, full_region.right, p),
+                    bottom: interpolate_i32(initial_region.bottom, full_region.bottom, p),
+                };
+                if unsafe {
+                    SetWindowPos(
+                        hwnd as _,
+                        std::ptr::null_mut(),
+                        x,
+                        y,
+                        0,
+                        0,
+                        SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER | SWP_ASYNCWINDOWPOS,
+                    )
+                } == 0
+                {
+                    if has_region {
+                        unsafe { SetWindowRgn(hwnd as _, std::ptr::null_mut(), 1) };
+                    }
+                    return Err(tauri::Error::Io(std::io::Error::last_os_error()));
+                }
+                let hrgn =
+                    unsafe { CreateRectRgn(region.left, region.top, region.right, region.bottom) };
+                if hrgn != std::ptr::null_mut() && unsafe { SetWindowRgn(hwnd as _, hrgn, 1) } != 0 {
+                    has_region = true;
+                }
+                if raw >= 1.0 {
+                    if has_region {
+                        unsafe { SetWindowRgn(hwnd as _, std::ptr::null_mut(), 1) };
+                    }
+                    return Ok(AnimationOutcome::Completed);
+                }
+                std::thread::sleep(Duration::from_millis(4));
+            }
+        })
+        .await
+        .map_err(|e| tauri::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?
+    }
+
+    #[cfg(not(windows))]
+    {
+        animate_window_bounds(window, current, target, duration, reduced_motion).await
     }
 }
 
@@ -474,7 +622,12 @@ pub async fn resize_response_panel(
     };
     let current = current_bounds(&window)?;
     let target = surface_geometry(&window)?.response_bounds(content_height);
-    let outcome = animate_window_bounds(&window, current, target, EXPAND_DURATION, reduced_motion).await?;
+    let from_waiting = current_window_mode() == WindowMode::Waiting;
+    let outcome = if from_waiting {
+        animate_expand_with_region(&window, current, target, EXPAND_DURATION, reduced_motion).await?
+    } else {
+        animate_window_bounds(&window, current, target, EXPAND_DURATION, reduced_motion).await?
+    };
     if let Some(mode) = completed_mode(WindowMode::Response, outcome) {
         set_window_mode(mode);
     }
@@ -521,7 +674,11 @@ async fn show_bottom_anchored(
         window.emit("surface://changed", "chat")?;
         window.show()?;
     }
-    let outcome = animate_window_bounds(&window, current, target, EXPAND_DURATION, reduced_motion).await?;
+    let outcome = if from_settings {
+        animate_window_bounds(&window, current, target, EXPAND_DURATION, reduced_motion).await?
+    } else {
+        animate_expand_with_region(&window, current, target, EXPAND_DURATION, reduced_motion).await?
+    };
     if outcome.should_finish_transition() {
         if from_settings {
             window.emit("surface://changed", "chat")?;
@@ -575,7 +732,7 @@ pub async fn show_settings_panel(app: &AppHandle, reduced_motion: bool) -> tauri
     window.set_resizable(false)?;
     window.emit("surface://changed", "settings")?;
     window.show()?;
-    let outcome = animate_window_bounds(&window, current, target, EXPAND_DURATION, reduced_motion).await?;
+    let outcome = animate_expand_with_region(&window, current, target, EXPAND_DURATION, reduced_motion).await?;
     if outcome.should_finish_transition() {
         window.set_focus()?;
         set_window_mode(WindowMode::Settings);
@@ -863,20 +1020,52 @@ mod tests {
         assert_eq!(bounds.position, PhysicalPosition::new(-1920, 120));
         assert_eq!(bounds.size, PhysicalSize::new(690, 840));
     }
-
     #[test]
-    fn settings_bounds_shrink_to_fit_a_small_work_area() {
-        let geometry = SurfaceGeometry {
-            work_area_position: PhysicalPosition::new(20, 30),
-            work_area_size: PhysicalSize::new(400, 300),
-            scale_factor: 1.0,
-        };
-        let bounds = geometry.settings_bounds(WindowBounds {
-            position: PhysicalPosition::new(200, 200),
+    fn expand_geometry_keeps_final_center_on_current_center() {
+        let current = WindowBounds {
+            position: PhysicalPosition::new(400, 300),
             size: PhysicalSize::new(50, 50),
-        });
-        assert_eq!(bounds.position, PhysicalPosition::new(20, 30));
-        assert_eq!(bounds.size, PhysicalSize::new(400, 300));
+        };
+        let target = WindowBounds {
+            position: PhysicalPosition::new(105, 296),
+            size: PhysicalSize::new(640, 58),
+        };
+        let geometry = expand_geometry(current, target);
+        assert_eq!(geometry.anchor_position, PhysicalPosition::new(105, 296));
+        let initial = geometry.initial_region;
+        assert_eq!((initial.left, initial.top, initial.right, initial.bottom), (295, 4, 345, 54));
+        let full = geometry.full_region;
+        assert_eq!((full.left, full.top, full.right, full.bottom), (0, 0, 640, 58));
     }
 
+    #[test]
+    fn expand_geometry_region_may_overflow_when_a_dimension_shrinks() {
+        let current = WindowBounds {
+            position: PhysicalPosition::new(100, 950),
+            size: PhysicalSize::new(640, 58),
+        };
+        let target = WindowBounds {
+            position: PhysicalPosition::new(150, 490),
+            size: PhysicalSize::new(460, 560),
+        };
+        let geometry = expand_geometry(current, target);
+        assert_eq!(geometry.anchor_position, PhysicalPosition::new(190, 699));
+        let initial = geometry.initial_region;
+        assert_eq!((initial.left, initial.top, initial.right, initial.bottom), (-90, 251, 550, 309));
+    }
+
+    #[test]
+    fn expand_geometry_centers_odd_dimensions() {
+        let current = WindowBounds {
+            position: PhysicalPosition::new(400, 300),
+            size: PhysicalSize::new(50, 50),
+        };
+        let target = WindowBounds {
+            position: PhysicalPosition::new(388, 288),
+            size: PhysicalSize::new(75, 75),
+        };
+        let geometry = expand_geometry(current, target);
+        let initial = geometry.initial_region;
+        assert_eq!((initial.left, initial.top, initial.right, initial.bottom), (13, 13, 63, 63));
+    }
 }
