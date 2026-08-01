@@ -44,6 +44,9 @@ export function useVoiceInput({
   const recorderRef = useRef<VoiceMediaRecorder | null>(null);
   const streamRef = useRef<VoiceMediaStream | null>(null);
   const intervalRef = useRef<TimerId | null>(null);
+  const timeoutRef = useRef<TimerId | null>(null);
+  // 转写请求在途标记：慢响应时跳过重叠调用，避免乱序覆盖与请求叠加
+  const busyRef = useRef(false);
   const onTranscriptRef = useRef(onTranscript);
   onTranscriptRef.current = onTranscript;
   const onErrorRef = useRef(onError);
@@ -52,15 +55,19 @@ export function useVoiceInput({
   transcribeRef.current = transcribe;
 
   const transcribeChunks = useCallback(async () => {
+    if (busyRef.current) return;
     const chunks = chunksRef.current;
     if (chunks.length === 0) return;
-    const blob = new Blob(chunks, { type: 'audio/webm' });
-    const buffer = new Uint8Array(await blob.arrayBuffer());
+    busyRef.current = true;
     try {
+      const blob = new Blob(chunks, { type: 'audio/webm' });
+      const buffer = new Uint8Array(await blob.arrayBuffer());
       const text = await transcribeRef.current(buffer, blob.type);
       if (text.trim()) onTranscriptRef.current(text.trim());
     } catch (error) {
       onErrorRef.current?.(error instanceof Error ? error.message : String(error));
+    } finally {
+      busyRef.current = false;
     }
   }, []);
 
@@ -88,6 +95,8 @@ export function useVoiceInput({
       recorder.onstop = async () => {
         clearIntervalFn(intervalRef.current as TimerId);
         intervalRef.current = null;
+        clearIntervalFn(timeoutRef.current as TimerId);
+        timeoutRef.current = null;
         await transcribeChunks();
         streamRef.current?.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
@@ -97,9 +106,21 @@ export function useVoiceInput({
       recorder.start();
       setStatus('recording');
       intervalRef.current = setIntervalFn(() => { void transcribeChunks(); }, intervalMs);
-      setIntervalFn(() => { void stop(); }, maxDurationMs); // 一次性超时停止
+      timeoutRef.current = setIntervalFn(() => { void stop(); }, maxDurationMs); // 一次性超时停止
     } catch (error) {
       onErrorRef.current?.(error instanceof Error ? error.message : String(error));
+      // getUserMedia 成功后 recorder.start() 等后续步骤抛异常时，释放已获得的媒体流
+      if (intervalRef.current) {
+        clearIntervalFn(intervalRef.current);
+        intervalRef.current = null;
+      }
+      if (timeoutRef.current) {
+        clearIntervalFn(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      recorderRef.current = null;
       setStatus('idle');
     }
   }, [status, getUserMedia, mediaRecorderFactory, intervalMs, maxDurationMs, setIntervalFn, clearIntervalFn, transcribeChunks, stop]);
@@ -107,6 +128,7 @@ export function useVoiceInput({
   useEffect(() => {
     return () => {
       if (intervalRef.current) clearIntervalFn(intervalRef.current);
+      if (timeoutRef.current) clearIntervalFn(timeoutRef.current);
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
   }, [clearIntervalFn]);
