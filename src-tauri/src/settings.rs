@@ -24,6 +24,7 @@ pub struct StoredSettings {
     pub stt_model: String,
     pub stt_api_key: Option<String>,
     pub stt_language: String,
+    pub stt_provider: String,
 }
 
 impl Default for StoredSettings {
@@ -40,6 +41,7 @@ impl Default for StoredSettings {
             stt_model: "whisper-1".to_string(),
             stt_api_key: None,
             stt_language: "auto".to_string(),
+            stt_provider: "openai".to_string(),
         }
     }
 }
@@ -57,6 +59,7 @@ pub struct AppSettings {
     pub stt_model: String,
     pub stt_api_key_configured: bool,
     pub stt_language: String,
+    pub stt_provider: String,
 }
 
 impl From<StoredSettings> for AppSettings {
@@ -75,6 +78,7 @@ impl From<StoredSettings> for AppSettings {
                 .as_ref()
                 .is_some_and(|key| !key.is_empty()),
             stt_language: value.stt_language,
+            stt_provider: value.stt_provider,
         }
     }
 }
@@ -92,6 +96,7 @@ pub struct SaveSettingsInput {
     pub stt_base_url: String,
     pub stt_model: String,
     pub stt_language: String,
+    pub stt_provider: String,
 }
 
 impl SaveSettingsInput {
@@ -130,6 +135,11 @@ impl SaveSettingsInput {
                 previous.stt_language
             } else {
                 self.stt_language.trim().to_string()
+            },
+            stt_provider: if self.stt_provider.trim().is_empty() {
+                previous.stt_provider
+            } else {
+                self.stt_provider.trim().to_string()
             },
         }
     }
@@ -197,6 +207,7 @@ mod tests {
             stt_base_url: "https://api.example.com/v1/".to_string(),
             stt_model: " whisper-test ".to_string(),
             stt_language: " auto ".to_string(),
+            stt_provider: "openai".to_string(),
         };
 
         let stored = input.into_stored(previous);
@@ -244,6 +255,7 @@ mod tests {
             global_shortcut: "Alt+Space".to_string(),
             autostart_enabled: false,
             floating_always_on_top: true,
+            stt_provider: "openai".to_string(),
         };
         let stored = input.into_stored(previous);
         assert_eq!(stored.stt_api_key.as_deref(), Some("sk-stt-old"));
@@ -283,10 +295,39 @@ mod tests {
             global_shortcut: "Alt+Space".to_string(),
             autostart_enabled: false,
             floating_always_on_top: true,
+            stt_provider: "openai".to_string(),
         };
         let stored = input.into_stored(previous);
         assert_eq!(stored.stt_base_url, "http://localhost:9000/v1");
         assert_eq!(stored.stt_model, "large-v3");
         assert_eq!(stored.stt_language, "zh");
+    }
+
+    #[test]
+    fn default_stt_provider_is_openai() {
+        assert_eq!(StoredSettings::default().stt_provider, "openai");
+    }
+
+    #[test]
+    fn save_input_keeps_previous_stt_provider_when_blank() {
+        let previous = StoredSettings {
+            stt_provider: "mimo".to_string(),
+            ..StoredSettings::default()
+        };
+        let stored = SaveSettingsInput {
+            stt_provider: "  ".to_string(),
+            stt_api_key: None,
+            stt_base_url: "".to_string(),
+            stt_model: "".to_string(),
+            stt_language: "".to_string(),
+            api_key: None,
+            base_url: "https://api.openai.com/v1".to_string(),
+            model: "gpt-4o-mini".to_string(),
+            global_shortcut: "Alt+Space".to_string(),
+            autostart_enabled: false,
+            floating_always_on_top: true,
+        }
+        .into_stored(previous);
+        assert_eq!(stored.stt_provider, "mimo");
     }
 }

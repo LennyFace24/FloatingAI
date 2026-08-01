@@ -28,6 +28,49 @@ pub fn map_stt_error(status: Option<u16>, kind: &str) -> String {
     }
 }
 
+pub const MIMO_BASE_URL: &str = "https://api.xiaomimimo.com/v1";
+
+pub fn mimo_chat_url(base_url: &str) -> String {
+    format!("{}/chat/completions", base_url.trim_end_matches('/'))
+}
+
+/// MiMo ASR 走 chat/completions + input_audio 消息：音频 base64 嵌入 data URI。
+/// language 为 auto 时不发送 asr_options（服务端自动检测）。
+pub fn build_mimo_chat_body(
+    audio: &[u8],
+    mime: &str,
+    model: &str,
+    language: &str,
+) -> serde_json::Value {
+    use base64::Engine as _;
+    let encoded = base64::engine::general_purpose::STANDARD.encode(audio);
+    let data_uri = format!("data:{mime};base64,{encoded}");
+    let mut body = serde_json::json!({
+        "model": model,
+        "messages": [{
+            "role": "user",
+            "content": [{
+                "type": "input_audio",
+                "input_audio": { "data": data_uri }
+            }]
+        }]
+    });
+    if language != "auto" {
+        body["asr_options"] = serde_json::json!({ "language": language });
+    }
+    body
+}
+
+pub fn parse_mimo_transcript(body: &serde_json::Value) -> Option<String> {
+    body.get("choices")?
+        .as_array()?
+        .first()?
+        .get("message")?
+        .get("content")?
+        .as_str()
+        .map(|content| content.to_string())
+}
+
 #[tauri::command]
 pub async fn transcribe_audio(
     app: tauri::AppHandle,
@@ -35,13 +78,24 @@ pub async fn transcribe_audio(
     mime: String,
 ) -> Result<String, String> {
     let stored = settings::load_settings(&app)?;
-    let api_key = resolve_api_key(&stored)?;
+    if stored.stt_provider == "mimo" {
+        transcribe_mimo(&stored, &audio, &mime).await
+    } else {
+        transcribe_openai(&stored, &audio, &mime).await
+    }
+}
 
+async fn transcribe_openai(
+    stored: &settings::StoredSettings,
+    audio: &[u8],
+    mime: &str,
+) -> Result<String, String> {
+    let api_key = resolve_api_key(stored)?;
     let url = stt_url(&stored.stt_base_url);
     let client = reqwest::Client::new();
     let mut form = reqwest::multipart::Form::new()
         .text("model", stored.stt_model.clone())
-        .part("file", reqwest::multipart::Part::bytes(audio).mime_str(&mime).map_err(|e| e.to_string())?.file_name("audio.webm"));
+        .part("file", reqwest::multipart::Part::bytes(audio.to_vec()).mime_str(mime).map_err(|e| e.to_string())?.file_name("audio.webm"));
     if stored.stt_language != "auto" {
         form = form.text("language", stored.stt_language.clone());
     }
@@ -64,6 +118,32 @@ pub async fn transcribe_audio(
         .and_then(|t| t.as_str())
         .map(|t| t.to_string())
         .ok_or_else(|| "语音识别响应缺少 text 字段".to_string())
+}
+
+async fn transcribe_mimo(
+    stored: &settings::StoredSettings,
+    audio: &[u8],
+    mime: &str,
+) -> Result<String, String> {
+    let api_key = resolve_api_key(stored)?;
+    let url = mimo_chat_url(&stored.stt_base_url);
+    let body = build_mimo_chat_body(audio, mime, &stored.stt_model, &stored.stt_language);
+    let client = reqwest::Client::new();
+
+    let response = client
+        .post(&url)
+        .bearer_auth(&api_key)
+        .json(&body)
+        .timeout(Duration::from_secs(30))
+        .send()
+        .await
+        .map_err(|e| map_stt_error(None, &e.to_string()))?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(map_stt_error(Some(status.as_u16()), ""));
+    }
+    let body: serde_json::Value = response.json().await.map_err(|e| format!("语音识别响应解析失败：{e}"))?;
+    parse_mimo_transcript(&body).ok_or_else(|| "语音识别响应缺少文本".to_string())
 }
 
 #[cfg(test)]
@@ -139,5 +219,68 @@ mod tests {
         assert!(map_stt_error(Some(404), "").contains("端点"));
         assert!(map_stt_error(None, "timeout").contains("超时"));
         assert!(map_stt_error(None, "connect").contains("网络"));
+    }
+
+    #[test]
+    fn mimo_chat_url_appends_chat_completions() {
+        assert_eq!(
+            mimo_chat_url("https://api.xiaomimimo.com/v1"),
+            "https://api.xiaomimimo.com/v1/chat/completions"
+        );
+        assert_eq!(
+            mimo_chat_url("https://api.xiaomimimo.com/v1/"),
+            "https://api.xiaomimimo.com/v1/chat/completions"
+        );
+    }
+
+    #[test]
+    fn mimo_body_embeds_base64_audio_with_data_uri() {
+        let body = build_mimo_chat_body(b"abc", "audio/wav", "mimo-v2.5-asr", "zh");
+        assert_eq!(body["model"], "mimo-v2.5-asr");
+        let content = &body["messages"][0]["content"][0];
+        assert_eq!(content["type"], "input_audio");
+        assert_eq!(
+            content["input_audio"]["data"],
+            "data:audio/wav;base64,YWJj"
+        );
+        assert_eq!(body["asr_options"]["language"], "zh");
+    }
+
+    #[test]
+    fn mimo_body_omits_asr_options_when_language_auto() {
+        let body = build_mimo_chat_body(b"abc", "audio/webm", "mimo-v2.5-asr", "auto");
+        assert_eq!(body.get("asr_options"), None);
+    }
+
+    #[test]
+    fn mimo_body_maps_webm_mime_to_data_uri_prefix() {
+        let body = build_mimo_chat_body(b"x", "audio/webm", "mimo-v2.5-asr", "auto");
+        assert!(body["messages"][0]["content"][0]["input_audio"]["data"]
+            .as_str()
+            .unwrap()
+            .starts_with("data:audio/webm;base64,"));
+    }
+
+    #[test]
+    fn mimo_parse_transcript_extracts_message_content() {
+        let json = serde_json::json!({
+            "choices": [{ "message": { "content": "你好世界" } }]
+        });
+        assert_eq!(parse_mimo_transcript(&json), Some("你好世界".to_string()));
+    }
+
+    #[test]
+    fn mimo_parse_transcript_returns_none_when_malformed() {
+        assert_eq!(parse_mimo_transcript(&serde_json::json!({})), None);
+        assert_eq!(
+            parse_mimo_transcript(&serde_json::json!({ "choices": [] })),
+            None
+        );
+        assert_eq!(
+            parse_mimo_transcript(&serde_json::json!({
+                "choices": [{ "message": {} }]
+            })),
+            None
+        );
     }
 }
