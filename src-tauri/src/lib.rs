@@ -4,6 +4,7 @@ mod ai;
 mod settings;
 mod shortcuts;
 mod tray;
+mod voice;
 mod windows;
 
 #[tauri::command]
@@ -148,6 +149,7 @@ pub fn run() {
             get_settings,
             save_settings,
             start_chat,
+            voice::transcribe_audio,
             stop_chat
         ])
         .setup(|app| {
