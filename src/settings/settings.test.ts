@@ -15,6 +15,7 @@ describe('settings form helpers', () => {
         sttModel: 'whisper-1',
         sttApiKey: '',
         sttLanguage: 'auto',
+        sttProvider: 'openai',
       }),
     ).toEqual({
       apiKey: 'sk-test',
@@ -27,6 +28,7 @@ describe('settings form helpers', () => {
       sttModel: 'whisper-1',
       sttApiKey: '',
       sttLanguage: 'auto',
+      sttProvider: 'openai',
     });
   });
 
@@ -42,6 +44,7 @@ describe('settings form helpers', () => {
       sttModel: 'whisper-1',
       sttApiKey: '',
       sttLanguage: 'auto',
+      sttProvider: 'openai',
     });
     expect(normalized.baseUrl).toBe('https://api.example.com/v1');
   });
@@ -59,6 +62,7 @@ describe('settings form helpers', () => {
         sttModel: 'whisper-1',
         sttApiKey: '',
         sttLanguage: 'auto',
+        sttProvider: 'openai',
       }),
     ).toEqual({
       baseUrl: '请输入 Base URL',

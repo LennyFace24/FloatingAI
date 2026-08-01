@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => ({
     sttModel: 'whisper-1',
     sttApiKeyConfigured: false,
     sttLanguage: 'auto',
+    sttProvider: 'openai',
   })),
 }));
 
@@ -276,11 +277,13 @@ describe('App assistant surface state flow', () => {
       sttModel: 'large-v3',
       sttApiKeyConfigured: false,
       sttLanguage: 'zh',
+      sttProvider: 'openai',
     });
     render(<App />);
     await openAssistant();
 
     await user.click(screen.getAllByRole('button', { name: '打开设置' })[0]);
+    await user.click(screen.getByRole('button', { name: '聊天设置' }));
     expect(await screen.findByLabelText('Base URL')).toHaveValue('https://api.example.com/v1');
     expect(screen.getByLabelText('模型名')).toHaveValue('gpt-test');
     expect(screen.getByLabelText('全局快捷键')).toHaveValue('Ctrl+Shift+Space');
@@ -299,6 +302,7 @@ describe('App assistant surface state flow', () => {
       sttModel: 'large-v3',
       sttApiKey: '',
       sttLanguage: 'zh',
+      sttProvider: 'openai',
     }));
     await waitFor(() => expect(mocks.showPromptBar).toHaveBeenCalledTimes(2));
   });

@@ -283,6 +283,23 @@ button { color: inherit; }
 .save-button { min-height: 40px; margin-top: 4px; border: 1px solid #ddd; border-radius: 8px; background: #ddd; color: #080808; cursor: pointer; font-weight: 600; }
 .save-button:disabled { opacity: .45; cursor: default; }
 
+.settings-menu { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.settings-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid #333;
+  border-radius: 10px;
+  background: var(--input);
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+}
+.settings-menu-item:hover { background: #161616; border-color: #555; }
+.settings-menu-label { font-size: 13px; font-weight: 600; }
+.settings-menu-hint { flex: 1; font-size: 11px; color: var(--text-muted); }
+
 @keyframes blink { 50% { opacity: 0; } }
 @keyframes waiting-spin { to { transform: rotate(360deg); } }
 

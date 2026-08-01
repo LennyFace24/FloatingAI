@@ -9,6 +9,7 @@ export interface SettingsFormInput {
   sttModel: string;
   sttApiKey: string;
   sttLanguage: string;
+  sttProvider: string;
 }
 
 export type SettingsErrors = Partial<Record<'baseUrl' | 'model' | 'globalShortcut', string>>;
@@ -24,6 +25,7 @@ export const defaultSettingsForm: SettingsFormInput = {
   sttModel: 'whisper-1',
   sttApiKey: '',
   sttLanguage: 'auto',
+  sttProvider: 'openai',
 };
 
 export function normalizeSettingsForm(input: SettingsFormInput): SettingsFormInput {
@@ -38,8 +40,10 @@ export function normalizeSettingsForm(input: SettingsFormInput): SettingsFormInp
     sttModel: input.sttModel.trim(),
     sttApiKey: input.sttApiKey.trim(),
     sttLanguage: input.sttLanguage.trim(),
+    sttProvider: input.sttProvider.trim(),
   };
 }
+
 
 export function validateSettingsForm(input: SettingsFormInput): SettingsErrors {
   const normalized = normalizeSettingsForm(input);

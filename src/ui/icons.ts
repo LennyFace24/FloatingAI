@@ -1,5 +1,7 @@
 export {
+  ArrowLeft,
   ArrowUp,
+  ChevronRight,
   Mic,
   MicOff,
   Check,

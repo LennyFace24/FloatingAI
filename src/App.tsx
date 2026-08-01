@@ -28,6 +28,7 @@ function settingsFormFromPublic(settings: AppSettings) {
     sttModel: settings.sttModel,
     sttApiKey: '',
     sttLanguage: settings.sttLanguage,
+    sttProvider: settings.sttProvider,
   } satisfies SettingsFormInput;
 }
 

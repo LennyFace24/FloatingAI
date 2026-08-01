@@ -11,6 +11,7 @@ export interface AppSettings {
   sttModel: string;
   sttApiKeyConfigured: boolean;
   sttLanguage: string;
+  sttProvider: string;
 }
 
 export interface SaveSettingsInput {
@@ -24,6 +25,7 @@ export interface SaveSettingsInput {
   sttModel: string;
   sttApiKey?: string;
   sttLanguage: string;
+  sttProvider: string;
 }
 
 export interface ChatMessageInput {
