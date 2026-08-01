@@ -146,4 +146,30 @@ describe('useVoiceInput', () => {
     await act(async () => { vi.advanceTimersByTime(2500); });
     expect(transcribe).toHaveBeenCalledTimes(2);
   });
+
+  it('flips back to idle immediately on stop even when the final transcription is slow', async () => {
+    const { recorder } = createRecorderMock();
+    const { stream } = createStreamMock();
+    let resolveTranscribe: (value: string) => void = () => {};
+    const transcribe = vi.fn().mockImplementation(
+      () => new Promise<string>((resolve) => { resolveTranscribe = resolve; }),
+    );
+    const { result } = renderHook(() => useVoiceInput({
+      onTranscript: vi.fn(),
+      transcribe,
+      getUserMedia: vi.fn().mockResolvedValue(stream),
+      mediaRecorderFactory: vi.fn().mockReturnValue(recorder),
+    }));
+
+    await act(async () => { await result.current.start(); });
+    expect(result.current.status).toBe('recording');
+
+    // 停止：MediaRecorder.stop() 同步触发 onstop；onstop 内最终转写挂起（慢网络）
+    act(() => { void result.current.stop(); });
+    // 状态必须立即回到 idle，不被慢转写阻塞
+    expect(result.current.status).toBe('idle');
+
+    // 慢转写完成后才回填文本
+    await act(async () => { resolveTranscribe('最终结果'); });
+  });
 });

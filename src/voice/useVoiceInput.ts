@@ -97,11 +97,13 @@ export function useVoiceInput({
         intervalRef.current = null;
         clearIntervalFn(timeoutRef.current as TimerId);
         timeoutRef.current = null;
-        await transcribeChunks();
         streamRef.current?.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
         recorderRef.current = null;
+        // 先翻转状态：停止的 UI 反馈（按钮/placeholder）不被慢转写阻塞，
+        // 最终转写在后台完成，结果仍通过 onTranscript 回填输入框
         setStatus('idle');
+        await transcribeChunks();
       };
       recorder.start();
       setStatus('recording');
