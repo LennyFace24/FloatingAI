@@ -49,11 +49,13 @@
 
 | 项 | 默认值 | 说明 |
 | --- | --- | --- |
+| 设置页 | 入口页 → 聊天 / 语音 | 聊天设置与语音设置各一个子页，入口页两卡片进入 |
 | API Key | 空 | 服务端 API 密钥（仅本地保存） |
 | Base URL | `https://api.openai.com/v1` | OpenAI 兼容接口地址，可指向任意兼容服务 |
-| 模型 | `gpt-4o-mini` | 模型名称 |
-| STT Base URL | `https://api.openai.com/v1` | 语音识别接口地址（OpenAI 兼容，`/audio/transcriptions`） |
-| STT 模型 | `whisper-1` | 语音识别模型名称 |
+| 模型 | `gpt-4o-mini` | 聊天模型名称 |
+| 语音服务类型 | OpenAI 兼容 | `OpenAI 兼容`（`/audio/transcriptions`）或 `小米 MiMo`（`mimo-v2.5-asr`，中英双语+方言） |
+| STT Base URL | `https://api.openai.com/v1` | 语音识别接口地址；选 MiMo 时固定为官方接口 |
+| STT 模型 | `whisper-1` / `mimo-v2.5-asr` | 语音识别模型名称（随服务类型） |
 | STT API Key | 空 | 语音识别专用密钥，留空则使用上方 API Key |
 | STT 语言 | `auto` | 转写语言（如 `zh`），`auto` 自动检测 |
 | 全局快捷键 | `Alt+Space` | 修改后立即生效 |
