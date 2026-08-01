@@ -79,8 +79,8 @@ impl From<StoredSettings> for AppSettings {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
 pub struct SaveSettingsInput {
     pub api_key: Option<String>,
     pub base_url: String,
@@ -238,5 +238,17 @@ mod tests {
         assert_eq!(stored.stt_base_url, "http://localhost:9000/v1");
         assert_eq!(stored.stt_model, "large-v3");
         assert_eq!(stored.stt_language, "zh");
+    }
+
+    #[test]
+    fn save_input_accepts_missing_stt_fields() {
+        let input: SaveSettingsInput = serde_json::from_str(
+            r#"{"apiKey":null,"baseUrl":"https://api.openai.com/v1","model":"gpt-4o-mini","globalShortcut":"Alt+Space","autostartEnabled":false,"floatingAlwaysOnTop":true}"#,
+        )
+        .unwrap();
+        assert_eq!(input.stt_base_url, "");
+        assert_eq!(input.stt_model, "");
+        assert_eq!(input.stt_language, "");
+        assert!(input.stt_api_key.is_none());
     }
 }
