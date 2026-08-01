@@ -19,7 +19,7 @@
         "decorations": false,
         "transparent": true,
         "shadow": false,
-        "alwaysOnTop": false,
+        "backgroundColor": [0, 0, 0, 0],
         "resizable": false,
         "skipTaskbar": true,
         "url": "index.html"

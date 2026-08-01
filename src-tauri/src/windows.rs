@@ -430,6 +430,7 @@ async fn animate_window_bounds(
 /// 动画期间用 SetWindowRgn 逐步扩张可见矩形，位置从当前中心锚点平移到目标位置。
 /// 避免逐帧 resize 视口导致的 Chromium tile 逐块补渲染。
 async fn animate_expand_with_region(
+    app: &AppHandle,
     window: &WebviewWindow,
     current: WindowBounds,
     target: WindowBounds,
@@ -451,6 +452,10 @@ async fn animate_expand_with_region(
     #[cfg(windows)]
     {
         let hwnd = window.hwnd()?.0 as isize;
+        // resize 后重设 WebView2 默认背景透明：WebView2 在窗口 resize（表面重建）后
+        // DefaultBackgroundColor 会重置为默认白色，导致圆角外透明区域短暂显示白色尖角。
+        let app = app.clone();
+        let webview = window.clone();
         return tauri::async_runtime::spawn_blocking(move || {
             // 同步设最终尺寸与锚点位置：等待 WM_SIZE 处理完，WebView2 视口一次 resize。
             if unsafe {
@@ -467,6 +472,9 @@ async fn animate_expand_with_region(
             {
                 return Err(tauri::Error::Io(std::io::Error::last_os_error()));
             }
+            let _ = app.run_on_main_thread(move || {
+                let _ = webview.as_ref().set_background_color(Some(tauri::window::Color(0, 0, 0, 0)));
+            });
 
             let mut has_region = false;
             let initial_hrgn = unsafe {
@@ -624,7 +632,7 @@ pub async fn resize_response_panel(
     let target = surface_geometry(&window)?.response_bounds(content_height);
     let from_waiting = current_window_mode() == WindowMode::Waiting;
     let outcome = if from_waiting {
-        animate_expand_with_region(&window, current, target, EXPAND_DURATION, reduced_motion).await?
+        animate_expand_with_region(app, &window, current, target, EXPAND_DURATION, reduced_motion).await?
     } else {
         animate_window_bounds(&window, current, target, EXPAND_DURATION, reduced_motion).await?
     };
@@ -633,7 +641,6 @@ pub async fn resize_response_panel(
     }
     Ok(())
 }
-
 pub async fn show_response_panel(
     app: &AppHandle,
     content_height: f64,
@@ -655,6 +662,7 @@ pub async fn show_response_panel(
     }
     Ok(())
 }
+
 async fn show_bottom_anchored(
     app: &AppHandle,
     reduced_motion: bool,
@@ -677,7 +685,7 @@ async fn show_bottom_anchored(
     let outcome = if from_settings {
         animate_window_bounds(&window, current, target, EXPAND_DURATION, reduced_motion).await?
     } else {
-        animate_expand_with_region(&window, current, target, EXPAND_DURATION, reduced_motion).await?
+        animate_expand_with_region(app, &window, current, target, EXPAND_DURATION, reduced_motion).await?
     };
     if outcome.should_finish_transition() {
         if from_settings {
@@ -692,7 +700,6 @@ async fn show_bottom_anchored(
 pub async fn show_chat_panel(app: &AppHandle, reduced_motion: bool) -> tauri::Result<()> {
     show_prompt_bar(app, reduced_motion).await
 }
-
 fn apply_always_on_top(app: &AppHandle, window: &WebviewWindow) {
     let always_on_top = settings::load_settings(app)
         .map(|stored| stored.floating_always_on_top)
@@ -732,7 +739,7 @@ pub async fn show_settings_panel(app: &AppHandle, reduced_motion: bool) -> tauri
     window.set_resizable(false)?;
     window.emit("surface://changed", "settings")?;
     window.show()?;
-    let outcome = animate_expand_with_region(&window, current, target, EXPAND_DURATION, reduced_motion).await?;
+    let outcome = animate_expand_with_region(app, &window, current, target, EXPAND_DURATION, reduced_motion).await?;
     if outcome.should_finish_transition() {
         window.set_focus()?;
         set_window_mode(WindowMode::Settings);
