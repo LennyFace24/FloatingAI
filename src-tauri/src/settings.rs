@@ -115,10 +115,22 @@ impl SaveSettingsInput {
             autostart_enabled: self.autostart_enabled,
             floating_always_on_top: self.floating_always_on_top,
             floating_position: previous.floating_position,
-            stt_base_url: self.stt_base_url.trim().trim_end_matches('/').to_string(),
-            stt_model: self.stt_model.trim().to_string(),
+            stt_base_url: if self.stt_base_url.trim().is_empty() {
+                previous.stt_base_url
+            } else {
+                self.stt_base_url.trim().trim_end_matches('/').to_string()
+            },
+            stt_model: if self.stt_model.trim().is_empty() {
+                previous.stt_model
+            } else {
+                self.stt_model.trim().to_string()
+            },
             stt_api_key,
-            stt_language: self.stt_language.trim().to_string(),
+            stt_language: if self.stt_language.trim().is_empty() {
+                previous.stt_language
+            } else {
+                self.stt_language.trim().to_string()
+            },
         }
     }
 }
@@ -250,5 +262,31 @@ mod tests {
         assert_eq!(input.stt_model, "");
         assert_eq!(input.stt_language, "");
         assert!(input.stt_api_key.is_none());
+    }
+
+    #[test]
+    fn save_input_keeps_previous_stt_strings_when_blank() {
+        let previous = StoredSettings {
+            stt_base_url: "http://localhost:9000/v1".to_string(),
+            stt_model: "large-v3".to_string(),
+            stt_language: "zh".to_string(),
+            ..StoredSettings::default()
+        };
+        let input = SaveSettingsInput {
+            stt_api_key: None,
+            stt_base_url: "  ".to_string(),
+            stt_model: " ".to_string(),
+            stt_language: "".to_string(),
+            api_key: None,
+            base_url: "https://api.openai.com/v1".to_string(),
+            model: "gpt-4o-mini".to_string(),
+            global_shortcut: "Alt+Space".to_string(),
+            autostart_enabled: false,
+            floating_always_on_top: true,
+        };
+        let stored = input.into_stored(previous);
+        assert_eq!(stored.stt_base_url, "http://localhost:9000/v1");
+        assert_eq!(stored.stt_model, "large-v3");
+        assert_eq!(stored.stt_language, "zh");
     }
 }
