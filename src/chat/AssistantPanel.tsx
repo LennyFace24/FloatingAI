@@ -31,7 +31,7 @@ export function AssistantPanel({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [voiceError, setVoiceError] = useState('');
   const { status: voiceStatus, start: startVoice, stop: stopVoice } = useVoiceInput({
-    onTranscript: (text) => setInput((prev) => (prev ? prev : text) || text),
+    onTranscript: (text) => setInput(text),
     onError: setVoiceError,
   });
   const messageListRef = useRef<HTMLDivElement>(null);
@@ -123,6 +123,7 @@ export function AssistantPanel({
           tooltip={voiceStatus === 'recording' ? '停止录音' : '语音输入'}
           className={voiceStatus === 'recording' ? 'voice-active' : undefined}
           onClick={() => {
+            setVoiceError('');
             void (voiceStatus === 'recording' ? stopVoice() : startVoice());
           }}
         >
