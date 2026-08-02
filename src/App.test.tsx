@@ -76,6 +76,7 @@ vi.mock('./bridge/events', () => ({
       mocks.errorHandler = handler;
       return Promise.resolve(() => undefined);
     },
+    onQuickAskPrefill: () => Promise.resolve(() => undefined),
   },
 }));
 

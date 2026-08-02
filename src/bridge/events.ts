@@ -27,4 +27,6 @@ export const events = {
     listen<SurfaceChangedPayload>('surface://changed', (event) => handler(event.payload)),
   onSurfaceShowRequested: (handler: () => void): Promise<UnlistenFn> =>
     listen('surface://show-requested', () => handler()),
+  onQuickAskPrefill: (handler: (text: string) => void): Promise<UnlistenFn> =>
+    listen<string>('quick-ask://prefill', (event) => handler(event.payload)),
 };

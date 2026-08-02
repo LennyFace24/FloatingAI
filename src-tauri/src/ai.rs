@@ -226,11 +226,11 @@ fn should_retry(status: Option<u16>, attempt: u32) -> bool {
     }
 }
 
-/// 第 `attempt`（1 起）次重试前的退避：1s、2s 指数增长，叠加微秒抖动。
-/// 抖动源用 `now` 的时间戳，保证同一 Instant 结果确定（可测）。
-fn retry_delay(attempt: u32, now: std::time::Instant) -> std::time::Duration {
+/// 第 `attempt`（1 起）次重试前的退避：1s、2s 指数增长，叠加确定性微抖。
+/// 抖动由 attempt 推导（`attempt * 37 % 100` ms），无时间依赖，可稳定测试。
+fn retry_delay(attempt: u32, _now: std::time::Instant) -> std::time::Duration {
     let base_ms = 1000u64 * (1u64 << attempt.saturating_sub(1).min(6));
-    let jitter_ms = (now.elapsed().as_micros() % 100) as u64;
+    let jitter_ms = (attempt * 37 % 100) as u64;
     std::time::Duration::from_millis(base_ms + jitter_ms)
 }
 

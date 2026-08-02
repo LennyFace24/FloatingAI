@@ -806,6 +806,19 @@ pub fn request_show_chat_panel(app: &AppHandle) {
     let _ = app.emit("surface://show-requested", ());
 }
 
+/// 快速提问：读取剪贴板文本，非空则唤起输入条并预填（quick-ask://prefill 事件）。
+pub fn request_quick_ask(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let Some(text) = crate::shortcuts::read_clipboard_text(&app) else {
+            return;
+        };
+        if show_prompt_bar(&app, false).await.is_ok() {
+            let _ = app.emit("quick-ask://prefill", text);
+        }
+    });
+}
+
 pub fn request_show_floating_ball(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {

@@ -1,4 +1,5 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
+import { events } from '../bridge/events';
 import { ArrowUp, Mic, MicOff, Minus, Square, Trash2, Wrench } from '../ui/icons';
 import { IconButton } from '../ui/IconButton';
 import { deriveAssistantPhase } from './assistantSurface';
@@ -72,6 +73,25 @@ export function AssistantPanel({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onCollapse]);
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void events
+      .onQuickAskPrefill((text) => {
+        if (disposed) return;
+        setInput(text);
+        inputRef.current?.focus();
+      })
+      .then((fn) => {
+        if (disposed) unlisten = fn;
+        else fn();
+      });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();

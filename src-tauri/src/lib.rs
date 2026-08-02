@@ -181,6 +181,7 @@ fn allow_microphone_permission(app: &tauri::App) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_autostart::Builder::new().build())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
@@ -212,6 +213,11 @@ pub fn run() {
             let stored = settings::load_settings(app.handle()).unwrap_or_default();
             if let Err(error) =
                 shortcuts::register_global_shortcut(app.handle(), &stored.global_shortcut)
+            {
+                eprintln!("{error}");
+            }
+            if let Err(error) =
+                shortcuts::register_quick_ask_shortcut(app.handle(), &stored.quick_ask_shortcut)
             {
                 eprintln!("{error}");
             }
