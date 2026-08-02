@@ -347,7 +347,20 @@ fn finish_reserved_toggle(reservation: ToggleReservation, successful_mode: Optio
     );
 }
 
+/// resize 后重设 WebView2 默认背景透明：WebView2 在窗口 resize（表面重建）后
+/// DefaultBackgroundColor 会重置为默认白色，导致圆角外透明区域短暂显示白色尖角。
+fn restore_transparent_background(app: &AppHandle, window: &WebviewWindow) {
+    let app = app.clone();
+    let webview = window.clone();
+    let _ = app.run_on_main_thread(move || {
+        let _ = webview
+            .as_ref()
+            .set_background_color(Some(tauri::window::Color(0, 0, 0, 0)));
+    });
+}
+
 async fn animate_window_bounds(
+    app: &AppHandle,
     window: &WebviewWindow,
     start: WindowBounds,
     target: WindowBounds,
@@ -357,14 +370,17 @@ async fn animate_window_bounds(
 
     if let TransitionPlan::Direct([exact_target]) = transition_plan(reduced_motion, target) {
         set_window_bounds(window, exact_target)?;
+        restore_transparent_background(app, window);
         return Ok(AnimationOutcome::Completed);
     }
-
     let generation = ANIMATION_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
 
     #[cfg(windows)]
     {
         let hwnd = window.hwnd()?.0 as isize;
+        // 动画完成后重设 WebView2 透明背景（缩小/微调路径同样会表面重建）
+        let app = app.clone();
+        let webview = window.clone();
         return tauri::async_runtime::spawn_blocking(move || {
             let started = Instant::now();
             loop {
@@ -392,13 +408,19 @@ async fn animate_window_bounds(
                             target.position.y,
                             target.size.width as i32,
                             target.size.height as i32,
-
                             SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOCOPYBITS,
                         )
                     };
                     if r == 0 {
                         return Err(tauri::Error::Io(std::io::Error::last_os_error()));
                     }
+                    // 重设 WebView2 透明背景：resize（表面重建）后 DefaultBackgroundColor 会重置
+                    // 为默认白色，导致圆角外透明区域短暂显示白色尖角。
+                    let _ = app.run_on_main_thread(move || {
+                        let _ = webview
+                            .as_ref()
+                            .set_background_color(Some(tauri::window::Color(0, 0, 0, 0)));
+                    });
                     return Ok(AnimationOutcome::Completed);
                 }
                 std::thread::sleep(Duration::from_millis(4));
@@ -472,9 +494,7 @@ async fn animate_expand_with_region(
             {
                 return Err(tauri::Error::Io(std::io::Error::last_os_error()));
             }
-            let _ = app.run_on_main_thread(move || {
-                let _ = webview.as_ref().set_background_color(Some(tauri::window::Color(0, 0, 0, 0)));
-            });
+            restore_transparent_background(&app, &webview);
 
             let mut has_region = false;
             let initial_hrgn = unsafe {
@@ -545,7 +565,7 @@ async fn animate_expand_with_region(
 
     #[cfg(not(windows))]
     {
-        animate_window_bounds(window, current, target, duration, reduced_motion).await
+        animate_window_bounds(app, window, current, target, duration, reduced_motion).await
     }
 }
 
@@ -634,7 +654,7 @@ pub async fn resize_response_panel(
     let outcome = if from_waiting {
         animate_expand_with_region(app, &window, current, target, EXPAND_DURATION, reduced_motion).await?
     } else {
-        animate_window_bounds(&window, current, target, EXPAND_DURATION, reduced_motion).await?
+        animate_window_bounds(app, &window, current, target, EXPAND_DURATION, reduced_motion).await?
     };
     if let Some(mode) = completed_mode(WindowMode::Response, outcome) {
         set_window_mode(mode);
@@ -674,19 +694,28 @@ async fn show_bottom_anchored(
     };
     let geometry = surface_geometry(&window)?;
     let current = current_bounds(&window)?;
-    let target = geometry.centered_bounds(current, logical_width, logical_height);
     let from_settings = current_window_mode() == WindowMode::Settings;
+    // 从设置页返回：settings_bounds 打开时保持输入条 position（左边对齐），
+    // 关闭时若用 centered_bounds（中心对齐）会因宽度 460→640 左移 (640-460)/2。
+    // 保持 position 的 x 不变、仅 y 底部锚定，往返零漂移。
+    let target = if from_settings {
+        let centered = geometry.centered_bounds(current, logical_width, logical_height);
+        WindowBounds {
+            position: PhysicalPosition::new(current.position.x, centered.position.y),
+            size: centered.size,
+        }
+    } else {
+        geometry.centered_bounds(current, logical_width, logical_height)
+    };
     apply_always_on_top(app, &window);
     window.set_resizable(false)?;
     if !from_settings {
         window.emit("surface://changed", "chat")?;
         window.show()?;
     }
-    let outcome = if from_settings {
-        animate_window_bounds(&window, current, target, EXPAND_DURATION, reduced_motion).await?
-    } else {
-        animate_expand_with_region(app, &window, current, target, EXPAND_DURATION, reduced_motion).await?
-    };
+    // 设置页→输入条：宽度 460→640 属放大方向，逐帧 resize 会让右半区域 tile 逐块补渲染。
+    // 与放大路径一致用 region 动画（视口一次到位 + region 扩张），emit 仍推迟到动画后。
+    let outcome = animate_expand_with_region(app, &window, current, target, EXPAND_DURATION, reduced_motion).await?;
     if outcome.should_finish_transition() {
         if from_settings {
             window.emit("surface://changed", "chat")?;
@@ -713,9 +742,17 @@ pub async fn show_floating_ball(app: &AppHandle, reduced_motion: bool) -> tauri:
     };
     let current = current_bounds(&window)?;
     let size = logical_size(&window, FLOATING_SIZE, FLOATING_SIZE)?;
-    let target = WindowBounds { position: current.position, size };
+    // 收起时位置中心对齐当前窗口中心（与展开的 centered_bounds 对称），
+    // 避免每次开关窗口累积左移漂移
+    let target = WindowBounds {
+        position: PhysicalPosition::new(
+            current.position.x + current.size.width as i32 / 2 - size.width as i32 / 2,
+            current.position.y + current.size.height as i32 / 2 - size.height as i32 / 2,
+        ),
+        size,
+    };
     window.set_resizable(false)?;
-    let outcome = animate_window_bounds(&window, current, target, COLLAPSE_DURATION, reduced_motion).await?;
+    let outcome = animate_window_bounds(app, &window, current, target, COLLAPSE_DURATION, reduced_motion).await?;
     if !outcome.should_finish_transition() {
         return Ok(());
     }

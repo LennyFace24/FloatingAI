@@ -18,12 +18,17 @@ type MainSurface = 'floating' | 'chat' | 'settings';
 
 function settingsFormFromPublic(settings: AppSettings) {
   return {
-    apiKey: '',
+    apiKey: settings.apiKey ?? '',
     baseUrl: settings.baseUrl,
     model: settings.model,
     globalShortcut: settings.globalShortcut,
     autostartEnabled: settings.autostartEnabled,
     floatingAlwaysOnTop: settings.floatingAlwaysOnTop,
+    sttBaseUrl: settings.sttBaseUrl,
+    sttModel: settings.sttModel,
+    sttApiKey: settings.sttApiKey ?? '',
+    sttLanguage: settings.sttLanguage,
+    sttProvider: settings.sttProvider,
   } satisfies SettingsFormInput;
 }
 

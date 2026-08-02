@@ -50,6 +50,94 @@ pub fn chat_completions_url(base_url: &str) -> String {
     format!("{}/chat/completions", base_url.trim_end_matches('/'))
 }
 
+pub fn models_url(base_url: &str) -> String {
+    format!("{}/models", base_url.trim_end_matches('/'))
+}
+
+pub fn models_url_with_filter(base_url: &str, sub_type: Option<&str>) -> String {
+    match sub_type {
+        Some(sub_type) => format!("{}/models?sub_type={}", base_url.trim_end_matches('/'), sub_type),
+        None => models_url(base_url),
+    }
+}
+
+/// 从 OpenAI 兼容的 /models 响应中提取模型 id（过滤空 id 与缺失 id）。
+pub fn parse_model_ids(body: &serde_json::Value) -> Vec<String> {
+    body.get("data")
+        .and_then(|data| data.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.get("id").and_then(|id| id.as_str()))
+                .filter(|id| !id.is_empty())
+                .map(|id| id.to_string())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// 根据聊天/语音作用域解析模型列表请求的目标：返回 (base_url, api_key, sub_type 过滤)。
+/// chat：聊天配置；voice：语音配置（硅基流动按 speech-to-text 过滤）。
+pub fn resolve_models_target(
+    stored: &settings::StoredSettings,
+    scope: &str,
+) -> Result<(String, String, Option<String>), String> {
+    match scope {
+        "chat" => {
+            let api_key = stored
+                .api_key
+                .clone()
+                .filter(|key| !key.is_empty())
+                .ok_or_else(|| "请先在设置中配置 API Key".to_string())?;
+            let sub_type = if stored.base_url.contains("siliconflow") {
+                Some("chat".to_string())
+            } else {
+                None
+            };
+            Ok((stored.base_url.clone(), api_key, sub_type))
+        }
+        "voice" => {
+            let api_key = stored
+                .stt_api_key
+                .clone()
+                .filter(|key| !key.is_empty())
+                .or_else(|| stored.api_key.clone().filter(|key| !key.is_empty()))
+                .ok_or_else(|| "请先在设置中配置 API Key 或 STT API Key".to_string())?;
+            let sub_type = if stored.stt_provider == "siliconflow" {
+                Some("speech-to-text".to_string())
+            } else {
+                None
+            };
+            Ok((stored.stt_base_url.clone(), api_key, sub_type))
+        }
+        _ => Err("未知的模型作用域".to_string()),
+    }
+}
+
+#[tauri::command]
+pub async fn list_models(
+    app: AppHandle,
+    scope: String,
+) -> Result<Vec<String>, String> {
+    let stored = settings::load_settings(&app)?;
+    let (base_url, api_key, sub_type) = resolve_models_target(&stored, &scope)?;
+    let url = models_url_with_filter(&base_url, sub_type.as_deref());
+    let client = reqwest::Client::new();
+    let response = client
+        .get(&url)
+        .bearer_auth(&api_key)
+        .timeout(std::time::Duration::from_secs(30))
+        .send()
+        .await
+        .map_err(|e| format!("获取模型列表失败：{e}"))?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(format!("获取模型列表失败（HTTP {}）", status.as_u16()));
+    }
+    let body: serde_json::Value = response.json().await.map_err(|e| format!("模型列表响应解析失败：{e}"))?;
+    Ok(parse_model_ids(&body))
+}
+
 pub async fn start_chat(
     app: AppHandle,
     runtime: Arc<ChatRuntime>,
@@ -235,5 +323,57 @@ mod tests {
         assert_eq!(json["stream"], true);
         assert_eq!(json["messages"][0]["role"], "user");
         assert_eq!(json["messages"][0]["content"], "hello");
+    }
+
+    #[test]
+    fn models_url_appends_models_endpoint() {
+        assert_eq!(
+            models_url("https://api.example.com/v1/"),
+            "https://api.example.com/v1/models"
+        );
+        assert_eq!(
+            models_url("https://api.example.com/v1"),
+            "https://api.example.com/v1/models"
+        );
+    }
+
+    #[test]
+    fn models_url_appends_subtype_filter_for_siliconflow_chat() {
+        assert_eq!(
+            models_url_with_filter("https://api.siliconflow.cn/v1", Some("chat")),
+            "https://api.siliconflow.cn/v1/models?sub_type=chat"
+        );
+        assert_eq!(
+            models_url_with_filter("https://api.siliconflow.cn/v1", Some("speech-to-text")),
+            "https://api.siliconflow.cn/v1/models?sub_type=speech-to-text"
+        );
+    }
+
+    #[test]
+    fn models_url_omits_filter_when_none() {
+        assert_eq!(
+            models_url_with_filter("https://api.example.com/v1", None),
+            "https://api.example.com/v1/models"
+        );
+    }
+
+    #[test]
+    fn parses_model_ids_from_standard_response() {
+        let json = serde_json::json!({
+            "object": "list",
+            "data": [
+                { "id": "model-a", "object": "model" },
+                { "id": "model-b" },
+                { "id": "" },
+                {}
+            ]
+        });
+        assert_eq!(parse_model_ids(&json), vec!["model-a".to_string(), "model-b".to_string()]);
+    }
+
+    #[test]
+    fn parses_model_ids_returns_empty_on_malformed() {
+        assert_eq!(parse_model_ids(&serde_json::json!({})), Vec::<String>::new());
+        assert_eq!(parse_model_ids(&serde_json::json!({ "data": "nope" })), Vec::<String>::new());
     }
 }

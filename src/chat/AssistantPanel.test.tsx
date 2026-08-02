@@ -1,10 +1,19 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AssistantPanel } from './AssistantPanel';
 import type { ConversationState } from './conversation';
+import { useVoiceInput } from '../voice/useVoiceInput';
+
+vi.mock('../voice/useVoiceInput', () => ({
+  useVoiceInput: vi.fn(),
+}));
+
+const useVoiceInputMock = vi.mocked(useVoiceInput);
+type VoiceOptions = Parameters<typeof useVoiceInput>[0];
 
 const idle: ConversationState = { status: 'idle', messages: [] };
+const promptPhase: ConversationState = idle;
 const callbacks = {
   onSend: vi.fn(() => Promise.resolve('req-2')),
   onStop: vi.fn(() => Promise.resolve()),
@@ -52,6 +61,8 @@ describe('AssistantPanel', () => {
   beforeEach(() => {
     vi.stubGlobal('ResizeObserver', ResizeObserverStub);
     createObserver.mockClear();
+    useVoiceInputMock.mockReset();
+    useVoiceInputMock.mockReturnValue({ status: 'idle', start: vi.fn(), stop: vi.fn() });
     frameCallback = undefined;
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
       frameCallback = callback;
@@ -198,5 +209,49 @@ describe('AssistantPanel', () => {
     render(<AssistantPanel conversation={conversation} {...callbacks} onCollapse={onCollapse} />);
     await user.keyboard('{Escape}');
     expect(onCollapse).toHaveBeenCalledOnce();
+  });
+
+  it('renders a mic button that starts live voice input', async () => {
+    render(<AssistantPanel conversation={promptPhase} {...callbacks} />);
+    expect(screen.getByRole('button', { name: '语音输入' })).toBeInTheDocument();
+  });
+
+  it('replaces the input with each live transcript chunk', () => {
+    let voiceOptions: Partial<VoiceOptions> = {};
+    useVoiceInputMock.mockImplementation((options) => {
+      voiceOptions = options;
+      return { status: 'recording', start: vi.fn(), stop: vi.fn() };
+    });
+    render(<AssistantPanel conversation={promptPhase} {...callbacks} />);
+    const textarea = screen.getByLabelText('输入问题') as HTMLTextAreaElement;
+
+    act(() => {
+      voiceOptions.onTranscript?.('interim text');
+    });
+    expect(textarea).toHaveValue('interim text');
+
+    act(() => {
+      voiceOptions.onTranscript?.('final full text');
+    });
+    expect(textarea).toHaveValue('final full text');
+  });
+
+  it('clears the voice error when the mic button is clicked again', () => {
+    let voiceOptions: Partial<VoiceOptions> = {};
+    const start = vi.fn();
+    useVoiceInputMock.mockImplementation((options) => {
+      voiceOptions = options;
+      return { status: 'idle', start, stop: vi.fn() };
+    });
+    render(<AssistantPanel conversation={promptPhase} {...callbacks} />);
+
+    act(() => {
+      voiceOptions.onError?.('麦克风权限被拒绝');
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent('麦克风权限被拒绝');
+
+    fireEvent.click(screen.getByRole('button', { name: '语音输入' }));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(start).toHaveBeenCalled();
   });
 });

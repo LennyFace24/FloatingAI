@@ -1,5 +1,12 @@
 export {
+  ArrowLeft,
   ArrowUp,
+  ChevronRight,
+  Eye,
+  EyeOff,
+  Mic,
+  MicOff,
+  RefreshCw,
   Check,
   Copy,
   Minus,
