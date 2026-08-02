@@ -127,8 +127,54 @@ export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPane
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saveError, setSaveError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [updateState, setUpdateState] = useState<
+    | { kind: 'idle' }
+    | { kind: 'checking' }
+    | { kind: 'available'; version: string; installing: boolean }
+    | { kind: 'up-to-date' }
+    | { kind: 'error'; message: string }
+  >({ kind: 'idle' });
   const drag = useWindowDrag();
 
+  /** 检查更新：有可用更新则下载安装并重启，无更新或出错显示状态。 */
+  async function checkForUpdates() {
+    setUpdateState({ kind: 'checking' });
+    try {
+      const { check } = await import('@tauri-apps/plugin-updater');
+      const update = await check();
+      if (!update) {
+        setUpdateState({ kind: 'up-to-date' });
+        return;
+      }
+      setUpdateState({ kind: 'available', version: update.version, installing: false });
+    } catch (error) {
+      setUpdateState({
+        kind: 'error',
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  async function installUpdate() {
+    setUpdateState((previous) =>
+      previous.kind === 'available' ? { ...previous, installing: true } : previous,
+    );
+    try {
+      const [{ check }, { relaunch }] = await Promise.all([
+        import('@tauri-apps/plugin-updater'),
+        import('@tauri-apps/plugin-process'),
+      ]);
+      const update = await check();
+      if (!update) return;
+      await update.downloadAndInstall();
+      await relaunch();
+    } catch (error) {
+      setUpdateState({
+        kind: 'error',
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
   /** 规范化当前表单；托管服务（MiMo/硅基流动）无条件使用官方 Base URL。校验失败时返回 null。 */
   function normalizeCurrentForm(): SettingsFormInput | null {
     const normalized = normalizeSettingsForm(form);
@@ -200,6 +246,43 @@ export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPane
             <span className="settings-menu-hint">语音识别引擎 · 语言</span>
             <ChevronRight size={16} />
           </button>
+        </div>
+        <div className="settings-menu" data-window-drag-exclude>
+          <div className="settings-menu-item settings-update-row">
+            <div className="settings-update-info">
+              <span className="settings-menu-label">检查更新</span>
+              <span className="settings-menu-hint">
+                {updateState.kind === 'checking'
+                  ? '正在检查…'
+                  : updateState.kind === 'up-to-date'
+                    ? '已是最新版本'
+                    : updateState.kind === 'available'
+                      ? `发现新版本 ${updateState.version}`
+                      : updateState.kind === 'error'
+                        ? updateState.message
+                        : '从 GitHub Releases 获取新版本'}
+              </span>
+            </div>
+            {updateState.kind === 'available' ? (
+              <IconButton
+                label="下载并安装"
+                tooltip="下载并安装"
+                disabled={updateState.installing}
+                onClick={() => void installUpdate()}
+              >
+                {updateState.installing ? <RefreshCw size={15} /> : <ChevronRight size={16} />}
+              </IconButton>
+            ) : (
+              <IconButton
+                label="检查更新"
+                tooltip="检查更新"
+                disabled={updateState.kind === 'checking'}
+                onClick={() => void checkForUpdates()}
+              >
+                <RefreshCw size={15} className={updateState.kind === 'checking' ? 'spin' : undefined} />
+              </IconButton>
+            )}
+          </div>
         </div>
       </section>
     );

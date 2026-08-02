@@ -395,6 +395,20 @@ button { color: inherit; }
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
 }
 
+.settings-update-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.settings-update-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.settings-update-row .settings-menu-hint {
+  white-space: normal;
+  word-break: break-all;
+  line-height: 1.35;
+}
+.spin { animation: waiting-spin 0.9s linear infinite; }
+
 @keyframes blink { 50% { opacity: 0; } }
 @keyframes waiting-spin { to { transform: rotate(360deg); } }
 
