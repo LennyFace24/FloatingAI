@@ -5,6 +5,16 @@ export type VoiceStatus = 'idle' | 'recording';
 /** setInterval 返回的定时器句柄（DOM 环境为 number） */
 type TimerId = ReturnType<typeof setInterval>;
 
+/** WebView2/Edge 的 SpeechRecognition（含 webkit 前缀）。不可用时返回 null。 */
+function defaultSpeechRecognition(): VoiceSpeechRecognition | null {
+  const globalWindow = window as unknown as Record<string, unknown>;
+  const ctor = globalWindow.SpeechRecognition ?? globalWindow.webkitSpeechRecognition;
+  if (typeof ctor === 'function') {
+    return new (ctor as new () => VoiceSpeechRecognition)();
+  }
+  return null;
+}
+
 export interface VoiceMediaStream { getTracks(): { stop(): void }[] }
 export interface VoiceMediaRecorder {
   start(): void;
@@ -13,14 +23,28 @@ export interface VoiceMediaRecorder {
   onstop: (() => void) | null;
 }
 
+/** 浏览器原生 SpeechRecognition 的最小接口（WebView2/Edge 支持，Windows 走系统语音识别）。 */
+export interface VoiceSpeechRecognition {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: { results: SpeechRecognitionResultList }) => void) | null;
+  onend: (() => void) | null;
+  onerror: ((event: { error: string }) => void) | null;
+  start(): void;
+  stop(): void;
+}
+
 interface UseVoiceInputOptions {
   onTranscript: (text: string) => void;
   onError?: (message: string) => void;
   intervalMs?: number;
   maxDurationMs?: number;
+  speechLang?: string;
   transcribe?: (audio: Uint8Array, mime: string) => Promise<string>;
   getUserMedia?: (constraints: { audio: boolean }) => Promise<VoiceMediaStream>;
   mediaRecorderFactory?: (stream: VoiceMediaStream) => VoiceMediaRecorder;
+  speechRecognitionFactory?: () => VoiceSpeechRecognition | null;
   setIntervalFn?: typeof setInterval;
   clearIntervalFn?: typeof clearInterval;
 }
@@ -30,9 +54,11 @@ export function useVoiceInput({
   onError,
   intervalMs = 2500,
   maxDurationMs = 60_000,
+  speechLang = 'zh-CN',
   transcribe = (audio, mime) => commands.transcribeAudio(audio, mime),
   getUserMedia = (constraints) => navigator.mediaDevices.getUserMedia(constraints) as Promise<VoiceMediaStream>,
   mediaRecorderFactory,
+  speechRecognitionFactory,
   setIntervalFn = setInterval,
   clearIntervalFn = clearInterval,
 }: UseVoiceInputOptions) {
@@ -42,6 +68,9 @@ export function useVoiceInput({
   statusRef.current = status;
   const chunksRef = useRef<Blob[]>([]);
   const recorderRef = useRef<VoiceMediaRecorder | null>(null);
+  const speechRef = useRef<VoiceSpeechRecognition | null>(null);
+  // 已确认（final）的识别文本，与当前中间结果拼接后整体回调
+  const finalSpeechRef = useRef('');
   const streamRef = useRef<VoiceMediaStream | null>(null);
   const intervalRef = useRef<TimerId | null>(null);
   const timeoutRef = useRef<TimerId | null>(null);
@@ -89,6 +118,7 @@ export function useVoiceInput({
         : (new MediaRecorder(stream as MediaStream) as unknown as VoiceMediaRecorder);
       recorderRef.current = recorder;
       chunksRef.current = [];
+      finalSpeechRef.current = '';
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) chunksRef.current.push(event.data);
       };
@@ -97,6 +127,9 @@ export function useVoiceInput({
         intervalRef.current = null;
         clearIntervalFn(timeoutRef.current as TimerId);
         timeoutRef.current = null;
+        // 结束原生流式识别
+        speechRef.current?.stop();
+        speechRef.current = null;
         streamRef.current?.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
         recorderRef.current = null;
@@ -107,6 +140,36 @@ export function useVoiceInput({
       };
       recorder.start();
       setStatus('recording');
+      // 原生流式识别：文字跟随说话速度实时回调（final 追加 + interim 替换）
+      const speech = speechRecognitionFactory ? speechRecognitionFactory() : defaultSpeechRecognition();
+      if (speech) {
+        speech.lang = speechLang;
+        speech.continuous = true;
+        speech.interimResults = true;
+        speech.onresult = (event) => {
+          let interim = '';
+          for (let i = 0; i < event.results.length; i += 1) {
+            const result = event.results[i];
+            if (result.isFinal) {
+              finalSpeechRef.current += result[0].transcript;
+            } else {
+              interim += result[0].transcript;
+            }
+          }
+          const combined = (finalSpeechRef.current + interim).trim();
+          if (combined) onTranscriptRef.current(combined);
+        };
+        speech.onerror = (event) => {
+          onErrorRef.current?.(`语音识别失败：${event.error}`);
+        };
+        speechRef.current = speech;
+        try {
+          speech.start();
+        } catch {
+          speechRef.current = null;
+          onErrorRef.current?.('语音识别启动失败（系统语音识别不可用）');
+        }
+      }
       intervalRef.current = setIntervalFn(() => { void transcribeChunks(); }, intervalMs);
       timeoutRef.current = setIntervalFn(() => { void stop(); }, maxDurationMs); // 一次性超时停止
     } catch (error) {
