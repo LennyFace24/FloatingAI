@@ -118,13 +118,22 @@ impl SurfaceGeometry {
         }
     }
 }
+/// 跨平台的矩形（Linux 上无 Windows RECT；Windows 动画循环里转 RECT）。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct RegionRect {
+    left: i32,
+    top: i32,
+    right: i32,
+    bottom: i32,
+}
+
 struct ExpandGeometry {
     /// 窗口起始位置：最终窗口中心对齐当前窗口中心
     anchor_position: PhysicalPosition<i32>,
     /// 初始可见矩形（窗口内坐标），以窗口中心为中心、等于当前窗口尺寸
-    initial_region: RECT,
+    initial_region: RegionRect,
     /// 最终可见矩形 = 整个窗口客户区
-    full_region: RECT,
+    full_region: RegionRect,
 }
 
 fn expand_geometry(current: WindowBounds, target: WindowBounds) -> ExpandGeometry {
@@ -134,13 +143,13 @@ fn expand_geometry(current: WindowBounds, target: WindowBounds) -> ExpandGeometr
     );
     let left = ((target.size.width as f64 - current.size.width as f64) / 2.0).round() as i32;
     let top = ((target.size.height as f64 - current.size.height as f64) / 2.0).round() as i32;
-    let initial_region = RECT {
+    let initial_region = RegionRect {
         left,
         top,
         right: left + current.size.width as i32,
         bottom: top + current.size.height as i32,
     };
-    let full_region = RECT {
+    let full_region = RegionRect {
         left: 0,
         top: 0,
         right: target.size.width as i32,
