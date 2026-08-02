@@ -304,7 +304,8 @@ button { color: inherit; }
 .model-input-row > input { flex: 1; }
 .model-picker { position: relative; }
 .model-picker .icon-button { flex-shrink: 0; }
-.model-picker .spin { animation: blink 1s linear infinite; }
+.model-picker .spin { animation: model-spin 1s linear infinite; }
+@keyframes model-spin { to { transform: rotate(360deg); } }
 .model-picker-dropdown {
   position: absolute;
   right: 0;
