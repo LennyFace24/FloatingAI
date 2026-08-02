@@ -26,7 +26,7 @@ function settingsFormFromPublic(settings: AppSettings) {
     floatingAlwaysOnTop: settings.floatingAlwaysOnTop,
     sttBaseUrl: settings.sttBaseUrl,
     sttModel: settings.sttModel,
-    sttApiKey: '',
+    sttApiKey: settings.sttApiKey ?? '',
     sttLanguage: settings.sttLanguage,
     sttProvider: settings.sttProvider,
   } satisfies SettingsFormInput;

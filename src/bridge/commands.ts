@@ -11,6 +11,7 @@ export interface AppSettings {
   sttBaseUrl: string;
   sttModel: string;
   sttApiKeyConfigured: boolean;
+  sttApiKey: string | null;
   sttLanguage: string;
   sttProvider: string;
 }

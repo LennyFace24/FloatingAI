@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
     sttBaseUrl: 'https://api.openai.com/v1',
     sttModel: 'whisper-1',
     sttApiKeyConfigured: false,
+    sttApiKey: null,
     sttLanguage: 'auto',
     sttProvider: 'openai',
   })),
@@ -276,6 +277,7 @@ describe('App assistant surface state flow', () => {
       sttBaseUrl: 'http://localhost:9000/v1',
       sttModel: 'large-v3',
       sttApiKeyConfigured: false,
+      sttApiKey: null,
       sttLanguage: 'zh',
       sttProvider: 'openai',
     });

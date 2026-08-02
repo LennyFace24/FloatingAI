@@ -60,6 +60,8 @@ pub struct AppSettings {
     pub stt_base_url: String,
     pub stt_model: String,
     pub stt_api_key_configured: bool,
+    /// STT API Key 明文（仅本机返回，供设置页「显示」按钮查看）
+    pub stt_api_key: Option<String>,
     pub stt_language: String,
     pub stt_provider: String,
 }
@@ -83,11 +85,16 @@ impl From<StoredSettings> for AppSettings {
                 .stt_api_key
                 .as_ref()
                 .is_some_and(|key| !key.is_empty()),
+            stt_api_key: value
+                .stt_api_key
+                .clone()
+                .filter(|key| !key.is_empty()),
             stt_language: value.stt_language,
             stt_provider: value.stt_provider,
         }
     }
 }
+
 
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -108,16 +115,15 @@ pub struct SaveSettingsInput {
 
 impl SaveSettingsInput {
     pub fn into_stored(self, previous: StoredSettings) -> StoredSettings {
+        // key 留空即清除（不再保留 previous）——用户可主动清空已保存的密钥
         let api_key = self
             .api_key
             .map(|key| key.trim().to_string())
-            .filter(|key| !key.is_empty())
-            .or(previous.api_key);
+            .filter(|key| !key.is_empty());
         let stt_api_key = self
             .stt_api_key
             .map(|key| key.trim().to_string())
-            .filter(|key| !key.is_empty())
-            .or(previous.stt_api_key);
+            .filter(|key| !key.is_empty());
 
         StoredSettings {
             api_key,
@@ -197,7 +203,7 @@ mod tests {
     }
 
     #[test]
-    fn save_input_keeps_previous_key_when_blank() {
+    fn save_input_clears_previous_key_when_blank() {
         let previous = StoredSettings {
             api_key: Some("sk-old".to_string()),
             ..StoredSettings::default()
@@ -217,7 +223,8 @@ mod tests {
         };
 
         let stored = input.into_stored(previous);
-        assert_eq!(stored.api_key.as_deref(), Some("sk-old"));
+        assert_eq!(stored.api_key, None);
+        assert_eq!(stored.stt_api_key, None);
         assert_eq!(stored.base_url, "https://api.example.com/v1");
         assert_eq!(stored.model, "gpt-test");
         assert!(stored.autostart_enabled);
@@ -233,19 +240,18 @@ mod tests {
         assert!(settings.stt_api_key.is_none());
     }
 
-    #[test]
-    fn public_settings_expose_stt_configured_flag_only() {
+    fn public_settings_expose_stt_api_key_for_viewing() {
         let stored = StoredSettings {
             stt_api_key: Some("sk-stt-secret".to_string()),
             ..StoredSettings::default()
         };
         let json = serde_json::to_value(AppSettings::from(stored)).unwrap();
         assert_eq!(json["sttApiKeyConfigured"], true);
-        assert!(!json.to_string().contains("sk-stt-secret"));
+        assert_eq!(json["sttApiKey"], "sk-stt-secret");
     }
 
     #[test]
-    fn save_input_keeps_previous_stt_key_when_blank() {
+    fn save_input_clears_previous_stt_key_when_blank() {
         let previous = StoredSettings {
             stt_api_key: Some("sk-stt-old".to_string()),
             ..StoredSettings::default()
@@ -264,11 +270,12 @@ mod tests {
             stt_provider: "openai".to_string(),
         };
         let stored = input.into_stored(previous);
-        assert_eq!(stored.stt_api_key.as_deref(), Some("sk-stt-old"));
+        assert_eq!(stored.stt_api_key, None);
         assert_eq!(stored.stt_base_url, "http://localhost:9000/v1");
         assert_eq!(stored.stt_model, "large-v3");
         assert_eq!(stored.stt_language, "zh");
     }
+
 
     #[test]
     fn save_input_accepts_missing_stt_fields() {
