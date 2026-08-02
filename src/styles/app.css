@@ -300,6 +300,41 @@ button { color: inherit; }
 .settings-menu-label { font-size: 13px; font-weight: 600; }
 .settings-menu-hint { flex: 1; font-size: 11px; color: var(--text-muted); }
 
+.model-input-row { display: flex; gap: 8px; align-items: center; }
+.model-input-row > input { flex: 1; }
+.model-picker { position: relative; }
+.model-picker .icon-button { flex-shrink: 0; }
+.model-picker .spin { animation: blink 1s linear infinite; }
+.model-picker-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 10;
+  width: 260px;
+  max-height: 220px;
+  overflow-y: auto;
+  background: #121212;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 4px;
+}
+.model-picker-dropdown ul { list-style: none; margin: 0; padding: 0; }
+.model-picker-dropdown li button {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 5px;
+}
+.model-picker-dropdown li button:hover { background: #1e1e1e; }
+.model-picker-empty { margin: 0; padding: 8px; font-size: 11px; color: var(--text-muted); }
+.model-picker-current { margin: 4px 0 0; padding: 6px 8px 2px; font-size: 11px; color: var(--text-muted); border-top: 1px solid #2a2a2a; }
+
 @keyframes blink { 50% { opacity: 0; } }
 @keyframes waiting-spin { to { transform: rotate(360deg); } }
 

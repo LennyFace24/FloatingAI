@@ -52,4 +52,5 @@ export const commands = {
   startChat: (requestId: string, messages: ChatMessageInput[]) =>
     invoke<void>('start_chat', { requestId, messages }),
   stopChat: (requestId: string) => invoke<void>('stop_chat', { requestId }),
+  listModels: (scope: 'chat' | 'voice') => invoke<string[]>('list_models', { scope }),
 };

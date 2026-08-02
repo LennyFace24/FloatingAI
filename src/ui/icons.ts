@@ -4,6 +4,7 @@ export {
   ChevronRight,
   Mic,
   MicOff,
+  RefreshCw,
   Check,
   Copy,
   Minus,

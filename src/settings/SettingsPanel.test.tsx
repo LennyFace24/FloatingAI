@@ -1,7 +1,15 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsPanel } from './SettingsPanel';
+
+const listModelsMock = vi.hoisted(() => vi.fn());
+
+vi.mock('../bridge/commands', () => ({
+  commands: {
+    listModels: listModelsMock,
+  },
+}));
 
 const chatSettings = {
   apiKey: '',
@@ -18,6 +26,7 @@ const chatSettings = {
 };
 
 describe('SettingsPanel', () => {
+  beforeEach(() => { listModelsMock.mockReset(); });
   it('renders a root menu with chat and voice entries', () => {
     render(
       <SettingsPanel initialSettings={chatSettings} onSave={vi.fn()} onClose={() => undefined} />,
@@ -121,5 +130,34 @@ describe('SettingsPanel', () => {
         sttBaseUrl: 'https://api.siliconflow.cn/v1',
       }),
     );
+  });
+
+  it('fetches chat models and fills the model input from the dropdown', async () => {
+    const user = userEvent.setup();
+    listModelsMock.mockResolvedValue(['gpt-test-1', 'gpt-test-2']);
+
+    render(
+      <SettingsPanel initialSettings={chatSettings} onSave={vi.fn()} onClose={() => undefined} />,
+    );
+    await user.click(screen.getByRole('button', { name: '聊天设置' }));
+
+    await user.click(screen.getByRole('button', { name: '获取聊天模型列表' }));
+    expect(listModelsMock).toHaveBeenCalledWith('chat');
+
+    await user.click(await screen.findByRole('button', { name: 'gpt-test-2' }));
+    expect(screen.getByLabelText('模型名')).toHaveValue('gpt-test-2');
+  });
+
+  it('shows an error when fetching models fails', async () => {
+    const user = userEvent.setup();
+    listModelsMock.mockRejectedValue(new Error('获取模型列表失败（HTTP 401）'));
+
+    render(
+      <SettingsPanel initialSettings={chatSettings} onSave={vi.fn()} onClose={() => undefined} />,
+    );
+    await user.click(screen.getByRole('button', { name: '聊天设置' }));
+
+    await user.click(screen.getByRole('button', { name: '获取聊天模型列表' }));
+    expect(await screen.findByText('获取模型列表失败（HTTP 401）')).toBeInTheDocument();
   });
 });

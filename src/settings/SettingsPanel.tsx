@@ -1,7 +1,8 @@
 import { FormEvent, useState } from 'react';
+import { commands } from '../bridge/commands';
 import { normalizeSettingsForm, type SettingsFormInput, validateSettingsForm } from './settings';
 import { IconButton } from '../ui/IconButton';
-import { ArrowLeft, ChevronRight, Minus } from '../ui/icons';
+import { ArrowLeft, ChevronRight, Minus, RefreshCw } from '../ui/icons';
 import { useWindowDrag } from '../window/useWindowDrag';
 
 interface SettingsPanelProps {
@@ -21,6 +22,68 @@ const MANAGED_PROVIDER_BASE_URL: Record<string, string> = {
   siliconflow: SILICONFLOW_BASE_URL,
 };
 
+interface ModelPickerProps {
+  scope: 'chat' | 'voice';
+  currentValue: string;
+  onSelect: (model: string) => void;
+}
+
+/** 「获取模型」按钮 + 展开的下拉列表；选择后填充模型输入框。 */
+function ModelPicker({ scope, currentValue, onSelect }: ModelPickerProps) {
+  const [open, setOpen] = useState(false);
+  const [models, setModels] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function fetchModels() {
+    setLoading(true);
+    setError('');
+    try {
+      const list = await commands.listModels(scope);
+      setModels(list);
+      setOpen(true);
+    } catch (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function choose(model: string) {
+    onSelect(model);
+    setOpen(false);
+  }
+
+  return (
+    <div className="model-picker">
+      <IconButton
+        label={`获取${scope === 'chat' ? '聊天' : '语音'}模型列表`}
+        tooltip="获取模型列表"
+        onClick={() => { void fetchModels(); }}
+        disabled={loading}
+      >
+        <RefreshCw size={14} className={loading ? 'spin' : undefined} />
+      </IconButton>
+      {open ? (
+        <div className="model-picker-dropdown">
+          {models.length === 0 ? (
+            <p className="model-picker-empty">未获取到模型</p>
+          ) : (
+            <ul>
+              {models.map((model) => (
+                <li key={model}>
+                  <button type="button" onClick={() => choose(model)}>{model}</button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="model-picker-current">当前：{currentValue || '未设置'}</p>
+        </div>
+      ) : null}
+      {error ? <p className="field-error" role="alert">{error}</p> : null}
+    </div>
+  );
+}
 export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPanelProps) {
   const [view, setView] = useState<SettingsView>('root');
   const [form, setForm] = useState(initialSettings);
@@ -122,12 +185,15 @@ export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPane
 
           <label>
             模型名
-            <input
-              aria-label="模型名"
-              type="text"
-              value={form.model}
-              onChange={(event) => setField('model', event.currentTarget.value)}
-            />
+            <div className="model-input-row">
+              <input
+                aria-label="模型名"
+                type="text"
+                value={form.model}
+                onChange={(event) => setField('model', event.currentTarget.value)}
+              />
+              <ModelPicker scope="chat" currentValue={form.model} onSelect={(model) => setField('model', model)} />
+            </div>
           </label>
           {errors.model ? <p className="field-error" role="alert">{errors.model}</p> : null}
 
@@ -214,13 +280,16 @@ export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPane
 
         <label>
           STT 模型
-          <input
-            aria-label="STT 模型"
-            type="text"
-            value={form.sttModel}
-            placeholder={modelPlaceholder}
-            onChange={(event) => setField('sttModel', event.currentTarget.value)}
-          />
+          <div className="model-input-row">
+            <input
+              aria-label="STT 模型"
+              type="text"
+              value={form.sttModel}
+              placeholder={modelPlaceholder}
+              onChange={(event) => setField('sttModel', event.currentTarget.value)}
+            />
+            <ModelPicker scope="voice" currentValue={form.sttModel} onSelect={(model) => setField('sttModel', model)} />
+          </div>
         </label>
 
         <label>
