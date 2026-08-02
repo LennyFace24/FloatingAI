@@ -32,8 +32,13 @@ export interface SaveSettingsInput {
 
 export interface ChatMessageInput {
   role: 'user' | 'assistant' | 'system';
-  content: string;
+  /** 文本字符串，或 OpenAI 多模态内容数组（text / image_url） */
+  content: string | MultimodalContentPart[];
 }
+
+export type MultimodalContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
 
 export const commands = {
   startFloatingDrag: () => invoke<void>('start_floating_drag'),
@@ -55,4 +60,6 @@ export const commands = {
     invoke<void>('start_chat', { requestId, messages }),
   stopChat: (requestId: string) => invoke<void>('stop_chat', { requestId }),
   listModels: (scope: 'chat' | 'voice') => invoke<string[]>('list_models', { scope }),
+  captureScreenRegion: (x: number, y: number, width: number, height: number) =>
+    invoke<string>('capture_screen_region', { x, y, width, height }),
 };
