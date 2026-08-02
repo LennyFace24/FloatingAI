@@ -4,10 +4,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsPanel } from './SettingsPanel';
 
 const listModelsMock = vi.hoisted(() => vi.fn());
+const saveSettingsMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../bridge/commands', () => ({
   commands: {
     listModels: listModelsMock,
+    saveSettings: saveSettingsMock,
   },
 }));
 
@@ -24,9 +26,8 @@ const chatSettings = {
   sttLanguage: 'auto',
   sttProvider: 'openai',
 };
-
 describe('SettingsPanel', () => {
-  beforeEach(() => { listModelsMock.mockReset(); });
+  beforeEach(() => { listModelsMock.mockReset(); saveSettingsMock.mockReset(); });
   it('renders a root menu with chat and voice entries', () => {
     render(
       <SettingsPanel initialSettings={chatSettings} onSave={vi.fn()} onClose={() => undefined} />,
@@ -135,6 +136,7 @@ describe('SettingsPanel', () => {
   it('fetches chat models and fills the model input from the dropdown', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockResolvedValue(undefined);
+    saveSettingsMock.mockResolvedValue(undefined);
     listModelsMock.mockResolvedValue(['gpt-test-1', 'gpt-test-2']);
 
     render(
@@ -143,8 +145,9 @@ describe('SettingsPanel', () => {
     await user.click(screen.getByRole('button', { name: '聊天设置' }));
 
     await user.click(screen.getByRole('button', { name: '获取聊天模型列表' }));
-    // 先自动保存当前配置，再拉取模型列表
-    expect(onSave).toHaveBeenCalled();
+    // 先静默保存当前配置（不触发 onSave 的返回副作用），再拉取模型列表
+    expect(saveSettingsMock).toHaveBeenCalled();
+    expect(onSave).not.toHaveBeenCalled();
     expect(listModelsMock).toHaveBeenCalledWith('chat');
 
     await user.click(await screen.findByRole('button', { name: 'gpt-test-2' }));

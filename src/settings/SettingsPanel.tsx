@@ -129,9 +129,8 @@ export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPane
   const [saving, setSaving] = useState(false);
   const drag = useWindowDrag();
 
-  /** 规范化当前表单并保存；托管服务自动填默认 Base URL。供保存按钮与「获取模型列表」共用。
-   * 校验失败时返回 false（不抛错，字段错误由 errors 展示）。 */
-  async function saveCurrentForm(): Promise<boolean> {
+  /** 规范化当前表单；托管服务自动填默认 Base URL。校验失败时返回 null。 */
+  function normalizeCurrentForm(): SettingsFormInput | null {
     const normalized = normalizeSettingsForm(form);
     const managedBaseUrl = MANAGED_PROVIDER_BASE_URL[normalized.sttProvider];
     const finalForm: SettingsFormInput =
@@ -140,19 +139,27 @@ export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPane
         : normalized;
     const nextErrors = validateSettingsForm(finalForm);
     setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) {
-      return false;
-    }
+    return Object.keys(nextErrors).length > 0 ? null : finalForm;
+  }
+
+  /** 仅保存当前配置（不返回），供「获取模型列表」使用，避免触发 App 的保存并返回副作用。 */
+  async function saveCurrentForm(): Promise<boolean> {
+    const finalForm = normalizeCurrentForm();
+    if (!finalForm) return false;
     setSaveError('');
-    await onSave(finalForm);
+    await commands.saveSettings(finalForm);
     return true;
   }
 
+  /** 保存按钮：保存并返回对话（onSave 由 App 注入，含 returnToAssistant）。 */
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    const finalForm = normalizeCurrentForm();
+    if (!finalForm) return;
     setSaving(true);
+    setSaveError('');
     try {
-      await saveCurrentForm();
+      await onSave(finalForm);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : String(error));
     } finally {
