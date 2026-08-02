@@ -336,6 +336,65 @@ button { color: inherit; }
 .model-picker-empty { margin: 0; padding: 8px; font-size: 11px; color: var(--text-muted); }
 .model-picker-current { margin: 4px 0 0; padding: 6px 8px 2px; font-size: 11px; color: var(--text-muted); border-top: 1px solid #2a2a2a; }
 
+.image-preview {
+  position: relative;
+  flex: 0 0 auto;
+  margin: 6px 10px 0;
+  max-width: 120px;
+}
+.image-preview img {
+  display: block;
+  max-width: 120px;
+  max-height: 72px;
+  border: 1px solid #333;
+  border-radius: 8px;
+  background: #000;
+}
+.image-preview-remove {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  width: 18px;
+  height: 18px;
+  line-height: 16px;
+  padding: 0;
+  border: 1px solid #555;
+  border-radius: 50%;
+  background: #222;
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+.capture-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.35);
+  cursor: crosshair;
+  touch-action: none;
+}
+.capture-hint {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 6px 14px;
+  background: #1e1e1e;
+  border: 1px solid #444;
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 12px;
+  z-index: 1;
+}
+.capture-rect {
+  position: fixed;
+  border: 1.5px solid #fff;
+  background: rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+}
+
 @keyframes blink { 50% { opacity: 0; } }
 @keyframes waiting-spin { to { transform: rotate(360deg); } }
 

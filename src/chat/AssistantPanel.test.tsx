@@ -9,6 +9,18 @@ vi.mock('../voice/useVoiceInput', () => ({
   useVoiceInput: vi.fn(),
 }));
 
+vi.mock('../bridge/commands', () => ({
+  commands: {
+    captureScreenRegion: vi.fn(() => Promise.resolve('data:image/png;base64,AAAA')),
+  },
+}));
+
+vi.mock('../bridge/events', () => ({
+  events: {
+    onQuickAskPrefill: () => Promise.resolve(() => undefined),
+  },
+}));
+
 const useVoiceInputMock = vi.mocked(useVoiceInput);
 type VoiceOptions = Parameters<typeof useVoiceInput>[0];
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { commands, type AppSettings } from './bridge/commands';
+import { commands, type AppSettings, type MultimodalContentPart } from './bridge/commands';
 import { events } from './bridge/events';
 import { AssistantPanel } from './chat/AssistantPanel';
 import { deriveAssistantPhase, type AssistantPhase } from './chat/assistantSurface';
@@ -82,14 +82,14 @@ export default function App() {
     setSurface('chat');
   }
 
-  async function sendMessage(content: string) {
+  async function sendMessage(content: string | MultimodalContentPart[]) {
     const requestId = crypto.randomUUID();
     const providerMessages = [
       ...buildProviderMessages(conversationRef.current.messages),
       { role: 'user' as const, content },
     ];
 
-    dispatchConversation({ type: 'send', requestId, content });
+    dispatchConversation({ type: 'send', requestId, content: typeof content === 'string' ? content : '[图片]' });
     try {
       await syncNativePhase('waiting');
       await commands.startChat(requestId, providerMessages);

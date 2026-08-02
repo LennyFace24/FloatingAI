@@ -11,7 +11,9 @@ use crate::settings;
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProviderMessage {
     pub role: String,
-    pub content: String,
+    /// 文本字符串，或 OpenAI 多模态数组：
+    /// `[{ "type": "text", "text": "..." }, { "type": "image_url", "image_url": { "url": "data:image/png;base64,..." } }]`
+    pub content: serde_json::Value,
 }
 
 #[derive(Debug, Serialize)]
@@ -373,7 +375,7 @@ mod tests {
             stream: true,
             messages: vec![ProviderMessage {
                 role: "user".to_string(),
-                content: "hello".to_string(),
+                content: serde_json::json!("hello"),
             }],
         };
         let json = serde_json::to_value(body).unwrap();
