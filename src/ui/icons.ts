@@ -10,7 +10,6 @@ export {
   Check,
   Copy,
   Minus,
-  Camera,
   ImagePlus,
   Square,
   Trash2,

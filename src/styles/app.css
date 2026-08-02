@@ -365,35 +365,6 @@ button { color: inherit; }
   font-size: 13px;
   cursor: pointer;
 }
-.capture-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  background: rgba(0, 0, 0, 0.35);
-  cursor: crosshair;
-  touch-action: none;
-}
-.capture-hint {
-  position: fixed;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  margin: 0;
-  padding: 6px 14px;
-  background: #1e1e1e;
-  border: 1px solid #444;
-  border-radius: 8px;
-  color: var(--text-primary);
-  font-size: 12px;
-  z-index: 1;
-}
-.capture-rect {
-  position: fixed;
-  border: 1.5px solid #fff;
-  background: rgba(255, 255, 255, 0.08);
-  pointer-events: none;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
-}
 
 .settings-update-row {
   display: flex;

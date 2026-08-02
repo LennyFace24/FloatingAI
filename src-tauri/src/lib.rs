@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 mod ai;
-mod screenshot;
 mod settings;
 mod shortcuts;
 mod tray;
@@ -200,7 +199,6 @@ pub fn run() {
             get_settings,
             save_settings,
             ai::list_models,
-            screenshot::capture_screen_region,
             voice::transcribe_audio,
             stop_chat
         ])

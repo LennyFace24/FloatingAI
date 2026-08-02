@@ -29,8 +29,6 @@ futures-util = "0.3"
 uuid = { version = "1", features = ["v4", "serde"] }
 base64 = "0.22"
 tauri-plugin-clipboard-manager = "2.3.2"
-xcap = { version = "0.9.8", features = ["image"] }
-image = { version = "0.25", default-features = false, features = ["png"] }
 tauri-plugin-dialog = "2.7.2"
 
 [target.'cfg(windows)'.dependencies]

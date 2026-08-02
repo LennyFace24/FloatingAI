@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { events } from '../bridge/events';
-import { commands, type MultimodalContentPart } from '../bridge/commands';
-import { ArrowUp, Camera, ImagePlus, Mic, MicOff, Minus, Square, Trash2, Wrench } from '../ui/icons';
+import { type MultimodalContentPart } from '../bridge/commands';
+import { ArrowUp, ImagePlus, Mic, MicOff, Minus, Square, Trash2, Wrench } from '../ui/icons';
 import { IconButton } from '../ui/IconButton';
 import { deriveAssistantPhase } from './assistantSurface';
 import type { ConversationState } from './conversation';
@@ -32,11 +32,7 @@ export function AssistantPanel({
   const [input, setInput] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [pendingImage, setPendingImage] = useState<string | null>(null);
-  // 截图模式：全屏遮罩拖选矩形
-  const [capturing, setCapturing] = useState(false);
-  const captureStartRef = useRef<{ x: number; y: number } | null>(null);
-  const [captureRect, setCaptureRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  const [captureError, setCaptureError] = useState('');
+  const [uploadError, setUploadError] = useState('');
   const [voiceError, setVoiceError] = useState('');
   // ref 跟踪录音状态：onTranscript 闭包经 ref 读取最新值，避免捕获陈旧状态
   const voiceStatusRef = useRef<VoiceStatus>('idle');
@@ -74,19 +70,11 @@ export function AssistantPanel({
   }, [phase]);
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        if (capturing) {
-          setCapturing(false);
-          setCaptureRect(null);
-          captureStartRef.current = null;
-        } else {
-          onCollapse();
-        }
-      }
+      if (event.key === 'Escape') onCollapse();
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [capturing, onCollapse]);
+  }, [onCollapse]);
 
   useEffect(() => {
     let disposed = false;
@@ -124,57 +112,9 @@ export function AssistantPanel({
     }
   }
 
-  // 截图拖选：记录起点，移动时更新矩形，松开时截图
-  function onCapturePointerDown(event: React.PointerEvent) {
-    if (capturing) return;
-    setCapturing(true);
-    setCaptureError('');
-    captureStartRef.current = { x: event.clientX, y: event.clientY };
-    setCaptureRect({ x: event.clientX, y: event.clientY, w: 0, h: 0 });
-  }
-
-  function onCapturePointerMove(event: React.PointerEvent) {
-    const start = captureStartRef.current;
-    if (!start) return;
-    const x = Math.min(start.x, event.clientX);
-    const y = Math.min(start.y, event.clientY);
-    const w = Math.abs(event.clientX - start.x);
-    const h = Math.abs(event.clientY - start.y);
-    setCaptureRect({ x, y, w, h });
-  }
-
-  async function onCapturePointerUp(event: React.PointerEvent) {
-    const start = captureStartRef.current;
-    if (!start) return;
-    captureStartRef.current = null;
-    setCapturing(false);
-    const x = Math.min(start.x, event.clientX);
-    const y = Math.min(start.y, event.clientY);
-    const w = Math.abs(event.clientX - start.x);
-    const h = Math.abs(event.clientY - start.y);
-    if (w < 4 || h < 4) {
-      setCaptureRect(null);
-      return;
-    }
-    try {
-      // 遮罩铺满工作区且缩放 1:1，client 坐标即物理像素
-      const dataUri = await commands.captureScreenRegion(
-        Math.round(x * window.devicePixelRatio),
-        Math.round(y * window.devicePixelRatio),
-        Math.round(w * window.devicePixelRatio),
-        Math.round(h * window.devicePixelRatio),
-      );
-      setPendingImage(dataUri);
-      setCaptureRect(null);
-    } catch (error) {
-      setCaptureError(error instanceof Error ? error.message : String(error));
-      setCaptureRect(null);
-    }
-  }
-
   /** 文件对话框选本地图片 → 读为 data URI → 预览。 */
   async function uploadImage() {
-    setCaptureError('');
+    setUploadError('');
     try {
       const { open } = await import('@tauri-apps/plugin-dialog');
       const selected = await open({
@@ -191,7 +131,7 @@ export function AssistantPanel({
       const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`;
       setPendingImage(`data:${mime};base64,${base64}`);
     } catch (error) {
-      setCaptureError(error instanceof Error ? error.message : String(error));
+      setUploadError(error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -261,19 +201,6 @@ export function AssistantPanel({
           <ImagePlus size={16} />
         </IconButton>
 
-        <IconButton
-          label="截图提问"
-          tooltip="截图提问"
-          disabled={isStreaming || voiceStatus === 'recording' || capturing}
-          onClick={() => {
-            setCaptureError('');
-            setCapturing(true);
-            setCaptureRect(null);
-            captureStartRef.current = null;
-          }}
-        >
-          <Camera size={16} />
-        </IconButton>
 
         <IconButton
           label={voiceStatus === 'recording' ? '停止录音' : '语音输入'}
@@ -373,32 +300,9 @@ export function AssistantPanel({
 
       {composer}
 
-      {capturing ? (
-        <div
-          className="capture-overlay"
-          data-window-drag-exclude
-          role="presentation"
-          onPointerDown={onCapturePointerDown}
-          onPointerMove={onCapturePointerMove}
-          onPointerUp={onCapturePointerUp}
-        >
-          <p className="capture-hint">按住并拖动选择截图区域，Esc 取消</p>
-          {captureRect && captureRect.w > 0 ? (
-            <div
-              className="capture-rect"
-              style={{
-                left: captureRect.x,
-                top: captureRect.y,
-                width: captureRect.w,
-                height: captureRect.h,
-              }}
-            />
-          ) : null}
-        </div>
-      ) : null}
-      {captureError ? (
+      {uploadError ? (
         <p className="voice-error" role="alert">
-          {captureError}
+          {uploadError}
         </p>
       ) : null}
       {voiceError ? (
