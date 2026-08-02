@@ -702,11 +702,9 @@ async fn show_bottom_anchored(
         window.emit("surface://changed", "chat")?;
         window.show()?;
     }
-    let outcome = if from_settings {
-        animate_window_bounds(app, &window, current, target, EXPAND_DURATION, reduced_motion).await?
-    } else {
-        animate_expand_with_region(app, &window, current, target, EXPAND_DURATION, reduced_motion).await?
-    };
+    // 设置页→输入条：宽度 460→640 属放大方向，逐帧 resize 会让右半区域 tile 逐块补渲染。
+    // 与放大路径一致用 region 动画（视口一次到位 + region 扩张），emit 仍推迟到动画后。
+    let outcome = animate_expand_with_region(app, &window, current, target, EXPAND_DURATION, reduced_motion).await?;
     if outcome.should_finish_transition() {
         if from_settings {
             window.emit("surface://changed", "chat")?;

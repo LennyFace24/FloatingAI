@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 
 export interface AppSettings {
   apiKeyConfigured: boolean;
+  apiKey: string | null;
   baseUrl: string;
   model: string;
   globalShortcut: string;

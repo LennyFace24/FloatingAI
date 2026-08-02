@@ -2,6 +2,8 @@ export {
   ArrowLeft,
   ArrowUp,
   ChevronRight,
+  Eye,
+  EyeOff,
   Mic,
   MicOff,
   RefreshCw,

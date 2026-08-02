@@ -50,6 +50,8 @@ impl Default for StoredSettings {
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     pub api_key_configured: bool,
+    /// API Key 明文（仅本机返回，供设置页「显示」按钮查看）
+    pub api_key: Option<String>,
     pub base_url: String,
     pub model: String,
     pub global_shortcut: String,
@@ -66,6 +68,10 @@ impl From<StoredSettings> for AppSettings {
     fn from(value: StoredSettings) -> Self {
         Self {
             api_key_configured: value.api_key.as_ref().is_some_and(|key| !key.is_empty()),
+            api_key: value
+                .api_key
+                .clone()
+                .filter(|key| !key.is_empty()),
             base_url: value.base_url,
             model: value.model,
             global_shortcut: value.global_shortcut,
@@ -82,6 +88,7 @@ impl From<StoredSettings> for AppSettings {
         }
     }
 }
+
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -179,15 +186,14 @@ mod tests {
     }
 
     #[test]
-    fn public_settings_never_expose_api_key() {
+    fn public_settings_expose_api_key_for_viewing() {
         let stored = StoredSettings {
             api_key: Some("sk-secret".to_string()),
             ..StoredSettings::default()
         };
         let json = serde_json::to_value(AppSettings::from(stored)).unwrap();
         assert_eq!(json["apiKeyConfigured"], true);
-        assert!(json.get("apiKey").is_none());
-        assert!(!json.to_string().contains("sk-secret"));
+        assert_eq!(json["apiKey"], "sk-secret");
     }
 
     #[test]

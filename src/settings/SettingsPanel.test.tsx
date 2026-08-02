@@ -163,4 +163,27 @@ describe('SettingsPanel', () => {
     await user.click(screen.getByRole('button', { name: '获取聊天模型列表' }));
     expect(await screen.findByText('获取模型列表失败（HTTP 401）')).toBeInTheDocument();
   });
+
+  it('reveals the saved API key when the show button is clicked', async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsPanel
+        initialSettings={{ ...chatSettings, apiKey: 'sk-revealed' }}
+        onSave={vi.fn()}
+        onClose={() => undefined}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: '聊天设置' }));
+
+    const keyInput = screen.getByLabelText('API Key');
+    expect(keyInput).toHaveAttribute('type', 'password');
+    expect(keyInput).toHaveValue('sk-revealed');
+
+    await user.click(screen.getByRole('button', { name: '显示密钥' }));
+    expect(keyInput).toHaveAttribute('type', 'text');
+    expect(keyInput).toHaveValue('sk-revealed');
+
+    await user.click(screen.getByRole('button', { name: '隐藏密钥' }));
+    expect(keyInput).toHaveAttribute('type', 'password');
+  });
 });

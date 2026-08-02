@@ -2,8 +2,41 @@ import { FormEvent, useState } from 'react';
 import { commands } from '../bridge/commands';
 import { normalizeSettingsForm, type SettingsFormInput, validateSettingsForm } from './settings';
 import { IconButton } from '../ui/IconButton';
-import { ArrowLeft, ChevronRight, Minus, RefreshCw } from '../ui/icons';
+import { ArrowLeft, ChevronRight, Eye, EyeOff, Minus, RefreshCw } from '../ui/icons';
 import { useWindowDrag } from '../window/useWindowDrag';
+
+/** 密码输入框 + 显示/隐藏切换按钮（用于查看已保存的 API Key 原文）。 */
+function PasswordField({
+  ariaLabel,
+  value,
+  onChange,
+  placeholder,
+}: {
+  ariaLabel: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="model-input-row">
+      <input
+        aria-label={ariaLabel}
+        type={visible ? 'text' : 'password'}
+        value={value}
+        placeholder={placeholder}
+        onChange={(event) => onChange(event.currentTarget.value)}
+      />
+      <IconButton
+        label={visible ? '隐藏密钥' : '显示密钥'}
+        tooltip={visible ? '隐藏密钥' : '显示密钥'}
+        onClick={() => setVisible((previous) => !previous)}
+      >
+        {visible ? <EyeOff size={14} /> : <Eye size={14} />}
+      </IconButton>
+    </div>
+  );
+}
 
 interface SettingsPanelProps {
   initialSettings: SettingsFormInput;
@@ -173,12 +206,11 @@ export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPane
         <form className="settings-form" data-window-drag-exclude onSubmit={handleSubmit}>
           <label>
             API Key
-            <input
-              aria-label="API Key"
-              type="password"
+            <PasswordField
+              ariaLabel="API Key"
               value={form.apiKey}
               placeholder="留空则保留已保存的 Key"
-              onChange={(event) => setField('apiKey', event.currentTarget.value)}
+              onChange={(value) => setField('apiKey', value)}
             />
           </label>
           <p className="field-note">API Key 仅保存在本机。</p>
@@ -305,12 +337,11 @@ export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPane
 
         <label>
           STT API Key
-          <input
-            aria-label="STT API Key"
-            type="password"
+          <PasswordField
+            ariaLabel="STT API Key"
             value={form.sttApiKey}
             placeholder="留空则保留已保存的 Key"
-            onChange={(event) => setField('sttApiKey', event.currentTarget.value)}
+            onChange={(value) => setField('sttApiKey', value)}
           />
         </label>
 
