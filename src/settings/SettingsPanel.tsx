@@ -13,6 +13,13 @@ interface SettingsPanelProps {
 type SettingsView = 'root' | 'chat' | 'voice';
 
 const MIMO_BASE_URL = 'https://api.xiaomimimo.com/v1';
+const SILICONFLOW_BASE_URL = 'https://api.siliconflow.cn/v1';
+const SILICONFLOW_DEFAULT_MODEL = 'FunAudioLLM/SenseVoiceSmall';
+
+const MANAGED_PROVIDER_BASE_URL: Record<string, string> = {
+  mimo: MIMO_BASE_URL,
+  siliconflow: SILICONFLOW_BASE_URL,
+};
 
 export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPanelProps) {
   const [view, setView] = useState<SettingsView>('root');
@@ -24,11 +31,12 @@ export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPane
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    // MiMo 固定 Base URL：provider=mimo 且 sttBaseUrl 为空时填入 MiMo 默认地址
+    // 托管服务（MiMo/硅基流动）固定 Base URL：provider 属于托管且 sttBaseUrl 为空时填入默认地址
     const normalized = normalizeSettingsForm(form);
+    const managedBaseUrl = MANAGED_PROVIDER_BASE_URL[normalized.sttProvider];
     const finalForm: SettingsFormInput =
-      normalized.sttProvider === 'mimo' && !normalized.sttBaseUrl
-        ? { ...normalized, sttBaseUrl: MIMO_BASE_URL }
+      managedBaseUrl && !normalized.sttBaseUrl
+        ? { ...normalized, sttBaseUrl: managedBaseUrl }
         : normalized;
     const nextErrors = validateSettingsForm(finalForm);
     setErrors(nextErrors);
@@ -162,7 +170,13 @@ export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPane
   }
 
   // view === 'voice'
-  const isMimo = form.sttProvider === 'mimo';
+  const isManagedProvider = form.sttProvider in MANAGED_PROVIDER_BASE_URL;
+  const modelPlaceholder =
+    form.sttProvider === 'siliconflow'
+      ? SILICONFLOW_DEFAULT_MODEL
+      : form.sttProvider === 'mimo'
+        ? 'mimo-v2.5-asr'
+        : 'whisper-1';
   return (
     <section className="settings-panel surface-panel" aria-label="语音设置" {...drag.pointerProps}>
       {header}
@@ -176,10 +190,11 @@ export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPane
           >
             <option value="openai">OpenAI 兼容</option>
             <option value="mimo">小米 MiMo</option>
+            <option value="siliconflow">硅基流动</option>
           </select>
         </label>
 
-        {!isMimo ? (
+        {!isManagedProvider ? (
           <label>
             STT Base URL
             <input
@@ -191,7 +206,10 @@ export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPane
             />
           </label>
         ) : (
-          <p className="field-note">使用小米 MiMo 官方接口（{MIMO_BASE_URL}）。</p>
+          <p className="field-note">
+            使用{form.sttProvider === 'mimo' ? '小米 MiMo' : '硅基流动'}官方接口（
+            {MANAGED_PROVIDER_BASE_URL[form.sttProvider]}）。
+          </p>
         )}
 
         <label>
@@ -200,7 +218,7 @@ export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPane
             aria-label="STT 模型"
             type="text"
             value={form.sttModel}
-            placeholder={isMimo ? 'mimo-v2.5-asr' : 'whisper-1'}
+            placeholder={modelPlaceholder}
             onChange={(event) => setField('sttModel', event.currentTarget.value)}
           />
         </label>

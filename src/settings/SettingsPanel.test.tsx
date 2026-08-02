@@ -99,4 +99,27 @@ describe('SettingsPanel', () => {
     expect(screen.getByRole('button', { name: '聊天设置' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '语音设置' })).toBeInTheDocument();
   });
+
+  it('supports siliconflow provider with managed base url and model hint', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <SettingsPanel initialSettings={chatSettings} onSave={onSave} onClose={() => undefined} />,
+    );
+    await user.click(screen.getByRole('button', { name: '语音设置' }));
+
+    await user.clear(screen.getByLabelText('STT Base URL'));
+    await user.selectOptions(screen.getByLabelText('语音服务类型'), 'siliconflow');
+    expect(screen.queryByLabelText('STT Base URL')).not.toBeInTheDocument();
+    expect(screen.getByText(/硅基流动官方接口/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '保存设置' }));
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sttProvider: 'siliconflow',
+        sttBaseUrl: 'https://api.siliconflow.cn/v1',
+      }),
+    );
+  });
 });
