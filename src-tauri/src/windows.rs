@@ -853,9 +853,36 @@ pub fn restore_floating_position(app: &AppHandle) {
     let Some(position) = stored.floating_position else {
         return;
     };
-    if let Some(window) = app.get_webview_window(FLOATING_LABEL) {
-        let _ = window.set_position(PhysicalPosition::new(position.x, position.y));
-    }
+    let Some(window) = app.get_webview_window(FLOATING_LABEL) else {
+        return;
+    };
+    // 记录位置所在显示器仍存在时直接恢复；显示器被拔掉（工作区原点失配）则回退主屏，
+    // 避免悬浮球被恢复到不存在的屏幕上。
+    let monitor_ok = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .is_some_and(|monitor| {
+            let area = monitor.work_area();
+            area.position.x == position.monitor_origin_x
+                && area.position.y == position.monitor_origin_y
+        });
+    let (x, y) = if monitor_ok {
+        (position.x, position.y)
+    } else {
+        // 回退：主屏工作区左上角（保持悬浮球可见）
+        let primary = window
+            .primary_monitor()
+            .ok()
+            .flatten()
+            .map(|monitor| *monitor.work_area())
+            .unwrap_or(tauri::PhysicalRect {
+                position: PhysicalPosition::new(0, 0),
+                size: PhysicalSize::new(0, 0),
+            });
+        (primary.position.x, primary.position.y)
+    };
+    let _ = window.set_position(PhysicalPosition::new(x, y));
 }
 
 pub fn attach_floating_position_persistence(app: &AppHandle) {
@@ -878,6 +905,15 @@ pub fn attach_floating_position_persistence(app: &AppHandle) {
         let generation = MOVE_PERSISTENCE_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
         let position = *position;
         let app_handle = app_handle.clone();
+        // 在闭包内（spawn 外）取显示器工作区原点，避免把 window_for_read move 进异步块
+        let monitor_origin = window_for_read
+            .current_monitor()
+            .ok()
+            .flatten()
+            .map(|monitor| {
+                let area = monitor.work_area();
+                (area.position.x, area.position.y)
+            });
         tauri::async_runtime::spawn(async move {
             tokio::time::sleep(MOVE_PERSISTENCE_DELAY).await;
             if !is_latest_move(
@@ -890,6 +926,8 @@ pub fn attach_floating_position_persistence(app: &AppHandle) {
                 stored.floating_position = Some(settings::WindowPosition {
                     x: position.x,
                     y: position.y,
+                    monitor_origin_x: monitor_origin.map(|(x, _)| x).unwrap_or(0),
+                    monitor_origin_y: monitor_origin.map(|(_, y)| y).unwrap_or(0),
                 });
                 let _ = settings::save_settings(&app_handle, &stored);
             }
