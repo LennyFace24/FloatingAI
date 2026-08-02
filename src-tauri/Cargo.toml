@@ -39,4 +39,4 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_Inpu
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-autostart = "2"
 tauri-plugin-global-shortcut = "2"
-
+tauri-plugin-updater = "2.10.1"
