@@ -731,7 +731,15 @@ pub async fn show_floating_ball(app: &AppHandle, reduced_motion: bool) -> tauri:
     };
     let current = current_bounds(&window)?;
     let size = logical_size(&window, FLOATING_SIZE, FLOATING_SIZE)?;
-    let target = WindowBounds { position: current.position, size };
+    // 收起时位置中心对齐当前窗口中心（与展开的 centered_bounds 对称），
+    // 避免每次开关窗口累积左移漂移
+    let target = WindowBounds {
+        position: PhysicalPosition::new(
+            current.position.x + current.size.width as i32 / 2 - size.width as i32 / 2,
+            current.position.y + current.size.height as i32 / 2 - size.height as i32 / 2,
+        ),
+        size,
+    };
     window.set_resizable(false)?;
     let outcome = animate_window_bounds(app, &window, current, target, COLLAPSE_DURATION, reduced_motion).await?;
     if !outcome.should_finish_transition() {
