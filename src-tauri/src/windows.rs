@@ -694,8 +694,19 @@ async fn show_bottom_anchored(
     };
     let geometry = surface_geometry(&window)?;
     let current = current_bounds(&window)?;
-    let target = geometry.centered_bounds(current, logical_width, logical_height);
     let from_settings = current_window_mode() == WindowMode::Settings;
+    // 从设置页返回：settings_bounds 打开时保持输入条 position（左边对齐），
+    // 关闭时若用 centered_bounds（中心对齐）会因宽度 460→640 左移 (640-460)/2。
+    // 保持 position 的 x 不变、仅 y 底部锚定，往返零漂移。
+    let target = if from_settings {
+        let centered = geometry.centered_bounds(current, logical_width, logical_height);
+        WindowBounds {
+            position: PhysicalPosition::new(current.position.x, centered.position.y),
+            size: centered.size,
+        }
+    } else {
+        geometry.centered_bounds(current, logical_width, logical_height)
+    };
     apply_always_on_top(app, &window);
     window.set_resizable(false)?;
     if !from_settings {
