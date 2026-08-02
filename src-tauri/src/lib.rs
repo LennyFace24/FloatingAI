@@ -198,6 +198,7 @@ pub fn run() {
             get_settings,
             save_settings,
             start_chat,
+            ai::list_models,
             voice::transcribe_audio,
             stop_chat
         ])
