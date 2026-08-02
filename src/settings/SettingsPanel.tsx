@@ -26,10 +26,11 @@ interface ModelPickerProps {
   scope: 'chat' | 'voice';
   currentValue: string;
   onSelect: (model: string) => void;
+  onSaveSettings: () => Promise<boolean>;
 }
 
-/** 「获取模型」按钮 + 展开的下拉列表；选择后填充模型输入框。 */
-function ModelPicker({ scope, currentValue, onSelect }: ModelPickerProps) {
+/** 「获取模型」按钮 + 展开的下拉列表；选择后填充模型输入框。获取前先保存当前配置，确保后端读到最新 base_url/provider。 */
+function ModelPicker({ scope, currentValue, onSelect, onSaveSettings }: ModelPickerProps) {
   const [open, setOpen] = useState(false);
   const [models, setModels] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -40,6 +41,8 @@ function ModelPicker({ scope, currentValue, onSelect }: ModelPickerProps) {
     setLoading(true);
     setError('');
     try {
+      const saved = await onSaveSettings();
+      if (!saved) return;
       const list = await commands.listModels(scope);
       setModels(list);
       setOpen(true);
@@ -93,9 +96,9 @@ export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPane
   const [saving, setSaving] = useState(false);
   const drag = useWindowDrag();
 
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-    // 托管服务（MiMo/硅基流动）固定 Base URL：provider 属于托管且 sttBaseUrl 为空时填入默认地址
+  /** 规范化当前表单并保存；托管服务自动填默认 Base URL。供保存按钮与「获取模型列表」共用。
+   * 校验失败时返回 false（不抛错，字段错误由 errors 展示）。 */
+  async function saveCurrentForm(): Promise<boolean> {
     const normalized = normalizeSettingsForm(form);
     const managedBaseUrl = MANAGED_PROVIDER_BASE_URL[normalized.sttProvider];
     const finalForm: SettingsFormInput =
@@ -104,12 +107,19 @@ export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPane
         : normalized;
     const nextErrors = validateSettingsForm(finalForm);
     setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) return;
-
-    setSaving(true);
+    if (Object.keys(nextErrors).length > 0) {
+      return false;
+    }
     setSaveError('');
+    await onSave(finalForm);
+    return true;
+  }
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    setSaving(true);
     try {
-      await onSave(finalForm);
+      await saveCurrentForm();
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -193,7 +203,7 @@ export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPane
                 value={form.model}
                 onChange={(event) => setField('model', event.currentTarget.value)}
               />
-              <ModelPicker scope="chat" currentValue={form.model} onSelect={(model) => setField('model', model)} />
+              <ModelPicker scope="chat" currentValue={form.model} onSelect={(model) => setField('model', model)} onSaveSettings={saveCurrentForm} />
             </div>
           </label>
           {errors.model ? <p className="field-error" role="alert">{errors.model}</p> : null}
@@ -289,7 +299,7 @@ export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPane
               placeholder={modelPlaceholder}
               onChange={(event) => setField('sttModel', event.currentTarget.value)}
             />
-            <ModelPicker scope="voice" currentValue={form.sttModel} onSelect={(model) => setField('sttModel', model)} />
+            <ModelPicker scope="voice" currentValue={form.sttModel} onSelect={(model) => setField('sttModel', model)} onSaveSettings={saveCurrentForm} />
           </div>
         </label>
 

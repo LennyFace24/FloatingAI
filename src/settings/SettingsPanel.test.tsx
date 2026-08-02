@@ -134,14 +134,17 @@ describe('SettingsPanel', () => {
 
   it('fetches chat models and fills the model input from the dropdown', async () => {
     const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
     listModelsMock.mockResolvedValue(['gpt-test-1', 'gpt-test-2']);
 
     render(
-      <SettingsPanel initialSettings={chatSettings} onSave={vi.fn()} onClose={() => undefined} />,
+      <SettingsPanel initialSettings={chatSettings} onSave={onSave} onClose={() => undefined} />,
     );
     await user.click(screen.getByRole('button', { name: '聊天设置' }));
 
     await user.click(screen.getByRole('button', { name: '获取聊天模型列表' }));
+    // 先自动保存当前配置，再拉取模型列表
+    expect(onSave).toHaveBeenCalled();
     expect(listModelsMock).toHaveBeenCalledWith('chat');
 
     await user.click(await screen.findByRole('button', { name: 'gpt-test-2' }));
