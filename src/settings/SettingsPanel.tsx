@@ -36,6 +36,7 @@ function ModelPicker({ scope, currentValue, onSelect }: ModelPickerProps) {
   const [error, setError] = useState('');
 
   async function fetchModels() {
+    if (loading) return;
     setLoading(true);
     setError('');
     try {
@@ -60,7 +61,7 @@ function ModelPicker({ scope, currentValue, onSelect }: ModelPickerProps) {
         label={`获取${scope === 'chat' ? '聊天' : '语音'}模型列表`}
         tooltip="获取模型列表"
         onClick={() => { void fetchModels(); }}
-        disabled={loading}
+        aria-busy={loading}
       >
         <RefreshCw size={14} className={loading ? 'spin' : undefined} />
       </IconButton>
