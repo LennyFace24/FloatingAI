@@ -4,10 +4,15 @@ use tauri_plugin_store::StoreExt;
 const SETTINGS_FILE: &str = "settings.json";
 const SETTINGS_KEY: &str = "appSettings";
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct WindowPosition {
     pub x: i32,
     pub y: i32,
+    /// 位置所在显示器的工作区原点（物理像素），作为显示器标识。
+    /// 多屏下每台显示器原点唯一；显示器被拔掉后据其判断是否失效。
+    pub monitor_origin_x: i32,
+    pub monitor_origin_y: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
