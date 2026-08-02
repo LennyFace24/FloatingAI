@@ -133,6 +133,31 @@ describe('SettingsPanel', () => {
     );
   });
 
+  it('forces managed base url for siliconflow even when a stale url is set', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+
+    // sttBaseUrl 初始为 OpenAI 地址（未手动清空）——选硅基流动后必须被官方地址覆盖
+    render(
+      <SettingsPanel
+        initialSettings={{ ...chatSettings, sttBaseUrl: 'https://api.openai.com/v1' }}
+        onSave={onSave}
+        onClose={() => undefined}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: '语音设置' }));
+
+    await user.selectOptions(screen.getByLabelText('语音服务类型'), 'siliconflow');
+    await user.click(screen.getByRole('button', { name: '保存设置' }));
+
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sttProvider: 'siliconflow',
+        sttBaseUrl: 'https://api.siliconflow.cn/v1',
+      }),
+    );
+  });
+
   it('fetches chat models and fills the model input from the dropdown', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockResolvedValue(undefined);

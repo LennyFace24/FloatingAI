@@ -129,14 +129,13 @@ export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPane
   const [saving, setSaving] = useState(false);
   const drag = useWindowDrag();
 
-  /** 规范化当前表单；托管服务自动填默认 Base URL。校验失败时返回 null。 */
+  /** 规范化当前表单；托管服务（MiMo/硅基流动）无条件使用官方 Base URL。校验失败时返回 null。 */
   function normalizeCurrentForm(): SettingsFormInput | null {
     const normalized = normalizeSettingsForm(form);
     const managedBaseUrl = MANAGED_PROVIDER_BASE_URL[normalized.sttProvider];
-    const finalForm: SettingsFormInput =
-      managedBaseUrl && !normalized.sttBaseUrl
-        ? { ...normalized, sttBaseUrl: managedBaseUrl }
-        : normalized;
+    const finalForm: SettingsFormInput = managedBaseUrl
+      ? { ...normalized, sttBaseUrl: managedBaseUrl }
+      : normalized;
     const nextErrors = validateSettingsForm(finalForm);
     setErrors(nextErrors);
     return Object.keys(nextErrors).length > 0 ? null : finalForm;
