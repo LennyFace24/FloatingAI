@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { commands, type AppSettings, type MultimodalContentPart } from './bridge/commands';
 import { events } from './bridge/events';
 import { AssistantPanel } from './chat/AssistantPanel';
@@ -11,8 +11,12 @@ import {
 import { prefersReducedMotion, RESPONSE_MIN_HEIGHT } from './app/motion';
 import { FloatingBall } from './floating/FloatingBall';
 import { defaultSettingsForm, type SettingsFormInput } from './settings/settings';
-import { SettingsPanel } from './settings/SettingsPanel';
 import './styles/app.css';
+
+// 设置页非首屏：懒加载，冷启动不解析
+const SettingsPanel = lazy(() =>
+  import('./settings/SettingsPanel').then((module) => ({ default: module.SettingsPanel })),
+);
 
 type MainSurface = 'floating' | 'chat' | 'settings';
 
@@ -123,14 +127,16 @@ export default function App() {
 
   if (surface === 'settings') {
     return (
-      <SettingsPanel
-        initialSettings={settingsForm}
-        onSave={async (settings) => {
-          await commands.saveSettings(settings);
-          await returnToAssistant();
-        }}
-        onClose={returnToAssistant}
-      />
+      <Suspense fallback={<div className="settings-loading" role="status">加载设置…</div>}>
+        <SettingsPanel
+          initialSettings={settingsForm}
+          onSave={async (settings) => {
+            await commands.saveSettings(settings);
+            await returnToAssistant();
+          }}
+          onClose={returnToAssistant}
+        />
+      </Suspense>
     );
   }
 

@@ -29,4 +29,29 @@ export default defineConfig(async () => ({
       ignored: ["**/src-tauri/**"],
     },
   },
-}));
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          // KaTeX 仅渲染公式时用，拆独立 chunk 延迟加载
+          if (id.includes('node_modules/katex') || id.includes('node_modules/rehype-katex')) {
+            return 'katex';
+          }
+          // markdown 渲染链拆出，避免首屏解析
+          if (
+            id.includes('node_modules/react-markdown') ||
+            id.includes('node_modules/remark-') ||
+            id.includes('node_modules/rehype-') ||
+            id.includes('node_modules/mdast-') ||
+            id.includes('node_modules/micromark') ||
+            id.includes('node_modules/unified') ||
+            id.includes('node_modules/prismjs')
+          ) {
+            return 'markdown';
+          }
+          return undefined;
+        },
+      },
+    },
+  },
+ }));
