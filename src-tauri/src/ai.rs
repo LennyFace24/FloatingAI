@@ -207,6 +207,33 @@ pub async fn stop_chat(runtime: Arc<ChatRuntime>, request_id: String) -> Result<
     Ok(())
 }
 
+/// 最多尝试次数：1 次初始请求 + 2 次重试。
+const MAX_ATTEMPTS: u32 = 3;
+
+/// 该状态码/网络错误是否值得重试。
+/// - `None`：网络层错误（连接失败/超时），值得重试
+/// - `Some(429)`：限流，值得重试
+/// - `Some(408)`：请求超时，值得重试
+/// - `Some(5xx)`：服务端错误，值得重试
+/// - 其余 4xx（401/403/400 等）为客户端/认证错误，重试无意义
+fn should_retry(status: Option<u16>, attempt: u32) -> bool {
+    if attempt >= MAX_ATTEMPTS - 1 {
+        return false;
+    }
+    match status {
+        None => true,
+        Some(status) => status == 429 || status == 408 || (500..=599).contains(&status),
+    }
+}
+
+/// 第 `attempt`（1 起）次重试前的退避：1s、2s 指数增长，叠加微秒抖动。
+/// 抖动源用 `now` 的时间戳，保证同一 Instant 结果确定（可测）。
+fn retry_delay(attempt: u32, now: std::time::Instant) -> std::time::Duration {
+    let base_ms = 1000u64 * (1u64 << attempt.saturating_sub(1).min(6));
+    let jitter_ms = (now.elapsed().as_micros() % 100) as u64;
+    std::time::Duration::from_millis(base_ms + jitter_ms)
+}
+
 async fn stream_chat_response(
     app: AppHandle,
     request_id: String,
@@ -216,20 +243,51 @@ async fn stream_chat_response(
     body: ChatCompletionsRequest,
     mut cancel_rx: oneshot::Receiver<()>,
 ) -> Result<(), String> {
-    let response = client
-        .post(url)
-        .bearer_auth(api_key)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|error| format!("网络请求失败：{error}"))?;
+    let started = std::time::Instant::now();
+    let mut last_error: Option<String> = None;
+    let mut response = None;
 
-    if !response.status().is_success() {
-        let status = response.status();
-        let text = response.text().await.unwrap_or_default();
-        let summary: String = text.chars().take(300).collect();
-        return Err(format!("AI 服务返回错误 {status}: {summary}"));
+    // 首请求建立阶段重试：网络错误 / 429 / 408 / 5xx，指数退避。
+    // 流已开始后的中断不重试——SSE 已输出的内容无法去重，重试会造成重复回复。
+    for attempt in 0..MAX_ATTEMPTS {
+        match client
+            .post(&url)
+            .bearer_auth(&api_key)
+            .json(&body)
+            .send()
+            .await
+        {
+            Ok(res) => {
+                let status = res.status();
+                if status.is_success() {
+                    response = Some(res);
+                    break;
+                }
+                let text = res.text().await.unwrap_or_default();
+                let summary: String = text.chars().take(300).collect();
+                if !should_retry(Some(status.as_u16()), attempt) {
+                    return Err(format!("AI 服务返回错误 {status}: {summary}"));
+                }
+                last_error = Some(format!("AI 服务返回错误 {status}: {summary}"));
+            }
+            Err(error) => {
+                if !should_retry(None, attempt) {
+                    return Err(format!("网络请求失败：{error}"));
+                }
+                last_error = Some(format!("网络请求失败：{error}"));
+            }
+        }
+
+        let delay = retry_delay(attempt + 1, started);
+        tokio::select! {
+            _ = &mut cancel_rx => return Ok(()),
+            _ = tokio::time::sleep(delay) => {}
+        }
     }
+
+    let Some(response) = response else {
+        return Err(last_error.unwrap_or_else(|| "AI 服务请求失败".to_string()));
+    };
 
     let mut stream = response.bytes_stream();
     let mut buffer = String::new();
@@ -375,5 +433,62 @@ mod tests {
     fn parses_model_ids_returns_empty_on_malformed() {
         assert_eq!(parse_model_ids(&serde_json::json!({})), Vec::<String>::new());
         assert_eq!(parse_model_ids(&serde_json::json!({ "data": "nope" })), Vec::<String>::new());
+    }
+}
+
+#[cfg(test)]
+mod retry_tests {
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn retries_network_error_and_retryable_statuses() {
+        // None = 网络层错误（连接失败）
+        assert!(should_retry(None, 0));
+        // 429 限流
+        assert!(should_retry(Some(429), 0));
+        // 5xx 服务端错误
+        assert!(should_retry(Some(500), 0));
+        assert!(should_retry(Some(503), 1));
+        // 408 请求超时
+        assert!(should_retry(Some(408), 0));
+    }
+
+    #[test]
+    fn does_not_retry_auth_or_client_errors() {
+        assert!(!should_retry(Some(401), 0));
+        assert!(!should_retry(Some(403), 0));
+        assert!(!should_retry(Some(400), 0));
+        assert!(!should_retry(Some(404), 0));
+    }
+
+    #[test]
+    fn stops_retrying_after_max_attempts() {
+        // attempt 从 0 数起；attempt 2 已是第 3 次（最后）尝试，不再重试
+        assert!(should_retry(Some(500), 1));
+        assert!(!should_retry(Some(500), 2));
+        assert!(!should_retry(None, 2));
+    }
+
+    #[test]
+    fn retry_delay_grows_exponentially() {
+        let now = Instant::now();
+        let first = retry_delay(1, now);
+        let second = retry_delay(2, now);
+        // 指数：第 2 次重试等待 ≥ 第 1 次
+        assert!(second >= first, "delay should grow: {second:?} >= {first:?}");
+        // 第 1 次重试 ~1s，第 2 次 ~2s（允许抖动 ±10ms）
+        assert!(first >= Duration::from_millis(990));
+        assert!(first <= Duration::from_millis(1100));
+        assert!(second >= Duration::from_millis(1990));
+        assert!(second <= Duration::from_millis(2100));
+    }
+
+    #[test]
+    fn retry_delay_is_deterministic_for_same_instant() {
+        let now = Instant::now();
+        let a = retry_delay(1, now);
+        let b = retry_delay(1, now);
+        assert_eq!(a, b);
     }
 }
