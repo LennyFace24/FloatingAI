@@ -220,7 +220,7 @@ describe('AssistantPanel', () => {
     let voiceOptions: Partial<VoiceOptions> = {};
     useVoiceInputMock.mockImplementation((options) => {
       voiceOptions = options;
-      return { status: 'idle', start: vi.fn(), stop: vi.fn() };
+      return { status: 'recording', start: vi.fn(), stop: vi.fn() };
     });
     render(<AssistantPanel conversation={promptPhase} {...callbacks} />);
     const textarea = screen.getByLabelText('输入问题') as HTMLTextAreaElement;

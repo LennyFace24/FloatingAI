@@ -3,7 +3,7 @@ import { ArrowUp, Mic, MicOff, Minus, Square, Trash2, Wrench } from '../ui/icons
 import { IconButton } from '../ui/IconButton';
 import { deriveAssistantPhase } from './assistantSurface';
 import type { ConversationState } from './conversation';
-import { useVoiceInput } from '../voice/useVoiceInput';
+import { useVoiceInput, type VoiceStatus } from '../voice/useVoiceInput';
 import { RichMessage } from './RichMessage';
 import { isPinnedToBottom, useResponseHeight } from './useResponseHeight';
 import { useWindowDrag } from '../window/useWindowDrag';
@@ -30,13 +30,19 @@ export function AssistantPanel({
   const [input, setInput] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [voiceError, setVoiceError] = useState('');
+  // ref 跟踪录音状态：onTranscript 闭包经 ref 读取最新值，避免捕获陈旧状态
+  const voiceStatusRef = useRef<VoiceStatus>('idle');
   const { status: voiceStatus, start: startVoice, stop: stopVoice } = useVoiceInput({
-    onTranscript: (text) => setInput(text),
+    // 仅录音中写入：识别结果实时替换输入框；停止后残余回调被守卫拦截，用户编辑不被覆盖
+    onTranscript: (text) => {
+      if (voiceStatusRef.current === 'recording') setInput(text);
+    },
     onError: setVoiceError,
   });
+  voiceStatusRef.current = voiceStatus;
+  const drag = useWindowDrag({ allowInteractiveRoot: true });
   const messageListRef = useRef<HTMLDivElement>(null);
   const isPinnedToBottomRef = useRef(true);
-  const drag = useWindowDrag({ allowInteractiveRoot: true });
   const phase = deriveAssistantPhase(conversation);
   const isStreaming = conversation.status === 'streaming';
   const contentKey = `${conversation.status}:${conversation.error ?? ''}:${conversation.messages
