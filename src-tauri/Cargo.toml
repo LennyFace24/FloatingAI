@@ -31,6 +31,7 @@ base64 = "0.22"
 tauri-plugin-clipboard-manager = "2.3.2"
 xcap = { version = "0.9.8", features = ["image"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
+tauri-plugin-dialog = "2.7.2"
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38"

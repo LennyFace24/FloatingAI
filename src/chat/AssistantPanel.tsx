@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { events } from '../bridge/events';
 import { commands, type MultimodalContentPart } from '../bridge/commands';
-import { ArrowUp, Camera, Mic, MicOff, Minus, Square, Trash2, Wrench } from '../ui/icons';
+import { ArrowUp, Camera, ImagePlus, Mic, MicOff, Minus, Square, Trash2, Wrench } from '../ui/icons';
 import { IconButton } from '../ui/IconButton';
 import { deriveAssistantPhase } from './assistantSurface';
 import type { ConversationState } from './conversation';
@@ -172,6 +172,29 @@ export function AssistantPanel({
     }
   }
 
+  /** 文件对话框选本地图片 → 读为 data URI → 预览。 */
+  async function uploadImage() {
+    setCaptureError('');
+    try {
+      const { open } = await import('@tauri-apps/plugin-dialog');
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }],
+      });
+      if (!selected || typeof selected !== 'string') return;
+      const { readFile } = await import('@tauri-apps/plugin-fs');
+      const bytes = await readFile(selected);
+      const base64 = btoa(
+        bytes.reduce((acc, byte) => acc + String.fromCharCode(byte), ''),
+      );
+      const ext = selected.split('.').pop()?.toLowerCase() ?? 'png';
+      const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`;
+      setPendingImage(`data:${mime};base64,${base64}`);
+    } catch (error) {
+      setCaptureError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   if (phase === 'waiting') {
     return (
       <section className="assistant-panel assistant-waiting" aria-label="AI 对话">
@@ -228,6 +251,15 @@ export function AssistantPanel({
             </button>
           </div>
         ) : null}
+
+        <IconButton
+          label="上传图片"
+          tooltip="上传图片"
+          disabled={isStreaming || voiceStatus === 'recording'}
+          onClick={() => void uploadImage()}
+        >
+          <ImagePlus size={16} />
+        </IconButton>
 
         <IconButton
           label="截图提问"

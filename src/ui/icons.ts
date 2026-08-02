@@ -11,6 +11,7 @@ export {
   Copy,
   Minus,
   Camera,
+  ImagePlus,
   Square,
   Trash2,
   Wrench,
