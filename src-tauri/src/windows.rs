@@ -759,17 +759,12 @@ async fn show_bottom_anchored(
     } else {
         EXPAND_DURATION
     };
-    let outcome = if from_settings {
-        // 设置页→输入条：用户要宽高动态变化（非瞬间切换），用逐帧 resize。
-        // 前端输入条宽度 min(640px, 100vw) 随视口自适应，动画即窗口与内容一起形变。
-        // 等前端渲染完再动画，避免动画开始时还是设置页内容。
-        wait_for_surface_ready().await;
-        animate_window_bounds(app, &window, current, target, duration, reduced_motion).await?
-    } else {
-        // 悬浮球→输入条：大幅放大路径用 region 动画（视口一次到位 + region 扩张），
-        // 内部已在 resize 到位后等待前端渲染完成。
-        animate_expand_with_region(app, &window, current, target, duration, reduced_motion).await?
-    };
+    // 统一用 region 动画（视口一次 resize 到位 + region 扩张）：
+    // 逐帧 resize 会让 WebView2 每帧重新布局渲染（模糊/抖动），且扩展区域 tile 未栅格化
+    // （右侧空白）。region 方案窗口一步到位，视口不逐帧变，无上述副作用；
+    // 窗口尺寸的「形变」观感由 region 扩张 + 前端交叉淡化共同呈现。
+    // 内部已在 resize 到位后等待前端渲染完成。
+    let outcome = animate_expand_with_region(app, &window, current, target, duration, reduced_motion).await?;
     if outcome.should_finish_transition() {
         window.set_focus()?;
     }
