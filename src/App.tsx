@@ -113,8 +113,11 @@ export default function App() {
   }, []);
 
   async function showAssistantPhase(phase: AssistantPhase) {
-    await syncNativePhase(phase);
+    // 先切 surface 再调 Rust 命令：Rust 动画会等 surface_ready，
+    // 而 surfaceReady effect 依赖 surface 变化触发——若等命令返回才 setSurface，
+    // 命令与 surfaceReady 互相等待（死锁）。先设 surface，命令返回后无需再设。
     setSurface('chat');
+    await syncNativePhase(phase);
   }
 
   async function sendMessage(content: string | MultimodalContentPart[]) {
