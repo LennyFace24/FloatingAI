@@ -38,9 +38,14 @@ function settingsFormFromPublic(settings: AppSettings) {
 
 export default function App() {
   const [surface, setSurface] = useState<MainSurface>('floating');
+  // 设置页→输入条交叉淡化：设置页保持挂载淡出、输入条叠加淡入，动画后卸载
+  const [leavingSettings, setLeavingSettings] = useState(false);
   const [settingsForm, setSettingsForm] = useState<SettingsFormInput>(defaultSettingsForm);
+  const settingsFormRef = useRef(settingsForm);
+  settingsFormRef.current = settingsForm;
   const conversationRef = useRef(initialConversationState);
   const [conversation, setConversation] = useState(initialConversationState);
+  const surfaceRef = useRef<MainSurface>('floating');
   const assistantPhase = deriveAssistantPhase(conversation);
 
   // surface 切换后通知 Rust 渲染完成（双 rAF 确保当前帧已提交到 WebView2），
@@ -75,7 +80,16 @@ export default function App() {
 
   useEffect(() => {
     const unlisten = Promise.all([
-      events.onSurfaceChanged(setSurface),
+      events.onSurfaceChanged((next) => {
+        // 设置页→输入条：触发交叉淡化（设置页淡出 + 输入条淡入），动画后卸载设置页
+        if (next === 'chat' && surfaceRef.current === 'settings') {
+          setLeavingSettings(true);
+          // 与 Rust 窗口形变时长（380ms）同步，淡化结束后卸载设置页
+          window.setTimeout(() => setLeavingSettings(false), 380);
+        }
+        surfaceRef.current = next;
+        setSurface(next);
+      }),
       events.onSurfaceShowRequested(() => {
         void showAssistantPhase(deriveAssistantPhase(conversationRef.current));
       }),
@@ -158,26 +172,40 @@ export default function App() {
 
   if (surface === 'chat') {
     return (
-      <AssistantPanel
-        conversation={conversation}
-        onSend={sendMessage}
-        onStop={stopMessage}
-        onClear={() => {
-          dispatchConversation({ type: 'clear' });
-          void syncNativePhase('prompt');
-        }}
-        onCollapse={() => {
-          void commands.showFloatingBall(prefersReducedMotion())
-            .then(() => setSurface('floating'))
-            .catch((error) => console.error('收起对话面板失败', error));
-        }}
-        onOpenSettings={() => {
-          void openSettings().catch((error) => console.error('打开设置失败', error));
-        }}
-        onContentHeight={(height) => {
-          void commands.resizeResponsePanel(height, prefersReducedMotion());
-        }}
-      />
+      <>
+        {leavingSettings ? (
+          // 交叉淡化：设置页淡出层（不交互，pointer-events 关）
+          <div className="settings-fade-out" aria-hidden="true">
+            <SettingsPanel
+              initialSettings={settingsFormRef.current}
+              onSave={async () => {}}
+              onClose={() => {}}
+            />
+          </div>
+        ) : null}
+        <div className={leavingSettings ? 'prompt-fade-in' : undefined}>
+          <AssistantPanel
+            conversation={conversation}
+            onSend={sendMessage}
+            onStop={stopMessage}
+            onClear={() => {
+              dispatchConversation({ type: 'clear' });
+              void syncNativePhase('prompt');
+            }}
+            onCollapse={() => {
+              void commands.showFloatingBall(prefersReducedMotion())
+                .then(() => setSurface('floating'))
+                .catch((error) => console.error('收起对话面板失败', error));
+            }}
+            onOpenSettings={() => {
+              void openSettings().catch((error) => console.error('打开设置失败', error));
+            }}
+            onContentHeight={(height) => {
+              void commands.resizeResponsePanel(height, prefersReducedMotion());
+            }}
+          />
+        </div>
+      </>
     );
   }
 

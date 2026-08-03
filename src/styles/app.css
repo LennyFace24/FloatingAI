@@ -77,6 +77,29 @@ button { color: inherit; }
   overflow: hidden;
 }
 
+/* 设置页→输入条交叉淡化：设置页淡出层 + 输入条淡入层 */
+.settings-fade-out {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  background: #080808;
+  animation: surface-fade-out 0.38s ease-out forwards;
+}
+.prompt-fade-in {
+  position: relative;
+  z-index: 6;
+  animation: surface-fade-in 0.3s ease-out both;
+}
+@keyframes surface-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes surface-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 .chat-panel,
 .assistant-prompt {
   width: min(640px, 100vw);
