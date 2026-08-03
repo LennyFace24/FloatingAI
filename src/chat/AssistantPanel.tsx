@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
+import { open } from '@tauri-apps/plugin-dialog';
+import { commands, type MultimodalContentPart } from '../bridge/commands';
 import { events } from '../bridge/events';
-import { type MultimodalContentPart } from '../bridge/commands';
 import { ArrowUp, ImagePlus, Mic, MicOff, Minus, Square, Trash2, Wrench } from '../ui/icons';
 import { IconButton } from '../ui/IconButton';
 import { deriveAssistantPhase } from './assistantSurface';
@@ -112,24 +113,17 @@ export function AssistantPanel({
     }
   }
 
-  /** 文件对话框选本地图片 → 读为 data URI → 预览。 */
+  /** 文件对话框选本地图片 → Rust 读为 data URI → 预览。 */
   async function uploadImage() {
     setUploadError('');
     try {
-      const { open } = await import('@tauri-apps/plugin-dialog');
       const selected = await open({
         multiple: false,
         filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }],
       });
       if (!selected || typeof selected !== 'string') return;
-      const { readFile } = await import('@tauri-apps/plugin-fs');
-      const bytes = await readFile(selected);
-      const base64 = btoa(
-        bytes.reduce((acc, byte) => acc + String.fromCharCode(byte), ''),
-      );
-      const ext = selected.split('.').pop()?.toLowerCase() ?? 'png';
-      const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`;
-      setPendingImage(`data:${mime};base64,${base64}`);
+      const dataUri = await commands.readImageFile(selected);
+      setPendingImage(dataUri);
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : String(error));
     }
