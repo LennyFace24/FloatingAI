@@ -1,66 +1,91 @@
-# Floating AI
+<div align="center">
 
-一个常驻桌面的 AI 助手：悬浮球随身待命，底部锚定输入条，流式回答直接渲染 Markdown、代码块与 LaTeX 公式。纯黑灰 Graphite Terminal 风格，无渐变、无装饰、不打扰。
+# FloatingAI
 
 ![platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-2b2b2b)
 ![license](https://img.shields.io/badge/license-MIT-2b2b2b)
 
-## 功能
+**一个常驻桌面的悬浮式 AI 助手。**  
+把聊天入口放在屏幕边缘：需要时随手呼出，不需要时尽量不打扰当前工作流。
 
-- **悬浮球**：50×50 悬浮球常驻屏幕任意位置，原生跟手拖动，位置自动记忆
-- **底部锚定交互流**：点击悬浮球展开输入条 → 发送后变为加载球 → 首字到达展开回复面板 → 回复结束底部常驻输入框，随时追问
-- **流式聊天**：逐字输出，支持随时停止；回复面板高度自适应内容
-- **语音输入**：输入条麦克风按钮实时语音转文字（STT），边说边出字，最长 60 秒自动停止
-- **Markdown / 代码高亮 / LaTeX**：公式用 KaTeX 渲染，代码块带复制按钮
-- **设置页**：单窗口动态过渡（进入/返回都有窗口动画），打开时自动夹紧在工作区内
-- **全局快捷键**：默认 `Alt+Space` 一键唤起/收起
-- **托盘菜单**：显示 / 设置 / 隐藏 / 退出；左键单击托盘图标直接唤起聊天
-- **开机自启动**：可选
-- **始终置顶**：可选，默认开启
-- **Graphite Terminal 美学**：纯黑灰、无渐变、无毛玻璃、无发光
+</div>
 
-## 使用
+## 概览
 
-| 操作 | 效果 |
-| --- | --- |
-| 拖动悬浮球 | 移动悬浮球，位置自动保存 |
-| 点击悬浮球 | 展开为输入条 |
-| `Enter` | 发送消息 |
-| `Shift+Enter` | 输入框内换行 |
-| 输入条 `🎤` 语音输入 | 开始/停止实时语音转写，文本直接进入输入框 |
-| `Esc` | 按阶段收起（输入条 → 悬浮球 → 隐藏） |
-| 输入条左侧 `⚙` | 打开设置页 |
-| 输入条左侧 `-` | 收起为悬浮球 |
-| `Alt+Space` | 全局唤起/收起聊天面板 |
-| 托盘左键单击 | 唤起聊天面板 |
-| 托盘右键菜单 | 显示 / 设置 / 隐藏 / 退出 |
+- 悬浮球常驻桌面，可拖动并记忆位置
+- 发送后流式返回结果，支持中途停止
+- 支持 Markdown、代码高亮和 LaTeX 公式渲染
+- 内置语音转写输入（STT）
+- 支持全局快捷键、托盘菜单、开机自启动、始终置顶
 
-## 安装
+## 快速开始
 
-从 [Releases](https://github.com/LennyFace24/FloatingAI/releases) 下载对应平台与架构的安装包：
+### 下载安装
 
-- **Windows**：`FloatingAI-windows-x64...setup.exe`（NSIS 安装器）
+从 [Releases](https://github.com/LennyFace24/FloatingAI/releases) 下载对应平台安装包：
+
+- **Windows**：`FloatingAI-windows-x64...setup.exe`
 - **macOS**：`.dmg` / `.app`
 - **Linux**：`.deb` / `.AppImage`
 
-## 配置
+### 初次配置
 
-设置页中可配置：
+在设置页填写以下信息即可开始使用：
+
+- API Key（仅保存在本地）
+- Base URL（默认 `https://api.openai.com/v1`，兼容 OpenAI 接口）
+- 模型名称（默认 `gpt-4o-mini`）
+
+## 使用方式
+
+| 操作 | 效果 |
+| --- | --- |
+| 拖动悬浮球 | 移动悬浮球并自动保存位置 |
+| 点击悬浮球 | 展开输入条 |
+| `Enter` | 发送消息 |
+| `Shift+Enter` | 输入框换行 |
+| `Esc` | 按阶段收起（输入条 → 悬浮球 → 隐藏） |
+| `Alt+Space` | 全局唤起 / 收起聊天面板（默认） |
+| 输入条 `🎤` | 开始 / 停止语音转写（最长 60 秒） |
+| 输入条 `⚙` | 打开设置页 |
+| 托盘左键 | 直接唤起聊天面板 |
+| 托盘右键 | 显示 / 设置 / 隐藏 / 退出 |
+
+## 功能细节
+
+### 聊天体验
+
+- 流式输出，支持随时停止
+- 回复面板高度随内容自适应
+- 回复结束后保留输入框，便于连续追问
+
+### 渲染能力
+
+- Markdown（GFM）
+- 代码高亮（含复制按钮）
+- LaTeX 公式（KaTeX）
+
+### 语音输入
+
+- 输入条麦克风按钮触发实时转写
+- 可选 OpenAI 兼容接口或小米 MiMo（`mimo-v2.5-asr`）
+- 可单独配置 STT API Key、模型、语言
+
+## 配置项
 
 | 项 | 默认值 | 说明 |
 | --- | --- | --- |
-| 设置页 | 入口页 → 聊天 / 语音 | 聊天设置与语音设置各一个子页，入口页两卡片进入 |
-| API Key | 空 | 服务端 API 密钥（仅本地保存） |
-| Base URL | `https://api.openai.com/v1` | OpenAI 兼容接口地址，可指向任意兼容服务 |
+| API Key | 空 | 聊天接口密钥（本地保存） |
+| Base URL | `https://api.openai.com/v1` | OpenAI 兼容接口地址 |
 | 模型 | `gpt-4o-mini` | 聊天模型名称 |
-| 语音服务类型 | OpenAI 兼容 | `OpenAI 兼容`（`/audio/transcriptions`）或 `小米 MiMo`（`mimo-v2.5-asr`，中英双语+方言） |
-| STT Base URL | `https://api.openai.com/v1` | 语音识别接口地址；选 MiMo 时固定为官方接口 |
-| STT 模型 | `whisper-1` / `mimo-v2.5-asr` | 语音识别模型名称（随服务类型） |
-| STT API Key | 空 | 语音识别专用密钥，留空则使用上方 API Key |
-| STT 语言 | `auto` | 转写语言（如 `zh`），`auto` 自动检测 |
+| 语音服务类型 | OpenAI 兼容 | OpenAI 兼容或小米 MiMo |
+| STT Base URL | `https://api.openai.com/v1` | 语音识别接口地址（MiMo 使用官方地址） |
+| STT 模型 | `whisper-1` / `mimo-v2.5-asr` | 随语音服务类型切换 |
+| STT API Key | 空 | 语音专用密钥；留空时复用 API Key |
+| STT 语言 | `auto` | 例如 `zh`，默认自动检测 |
 | 全局快捷键 | `Alt+Space` | 修改后立即生效 |
 | 开机自启动 | 关 | 登录时自动启动 |
-| 始终置顶 | 开 | 窗口保持在所有窗口之上 |
+| 始终置顶 | 开 | 保持窗口置顶 |
 
 ## 开发
 
@@ -68,10 +93,10 @@
 
 - [Node.js](https://nodejs.org/) ≥ 22（建议 24）
 - [pnpm](https://pnpm.io/) ≥ 10
-- [Rust](https://rustup.rs/)（stable）
-- 平台依赖：Windows 需要 WebView2（系统自带）；Linux 需要 `libwebkit2gtk-4.1-dev`、`libappindicator3-dev`、`librsvg2-dev`、`patchelf`
+- [Rust](https://rustup.rs/) stable
+- Linux 额外依赖：`libwebkit2gtk-4.1-dev`、`libappindicator3-dev`、`librsvg2-dev`、`patchelf`
 
-### 启动
+### 本地运行
 
 ```bash
 pnpm install
@@ -81,8 +106,8 @@ pnpm tauri dev
 ### 测试
 
 ```bash
-pnpm test        # 前端（Vitest）
-cargo test --manifest-path src-tauri/Cargo.toml   # Rust
+pnpm test
+cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
 ### 构建
@@ -93,26 +118,22 @@ pnpm tauri build
 
 ## 技术栈
 
-- **框架**：[Tauri 2](https://tauri.app/) + React 18 + TypeScript + Vite
-- **窗口**：单 `floating` 窗口承载全部表面（悬浮球 / 输入条 / 加载球 / 回复 / 设置），Rust 侧持有边界与状态机，前端只发离散状态与内容高度
-- **动画**：原生 `SetWindowPos` 驱动窗口形变（放大路径使用窗口 Region 裁剪，避免 Chromium tile 逐块渲染），`ease-out` 缓动，支持 `prefers-reduced-motion` 直接跳转
-- **渲染**：Markdown（react-markdown）、代码高亮（Prism）、公式（KaTeX）
-- **存储**：Tauri Store 插件保存设置与悬浮球位置
+- Tauri 2
+- React + TypeScript + Vite
+- react-markdown + Prism + KaTeX
+- Tauri Store（本地设置持久化）
 
-## 架构
+## Roadmap
 
-```mermaid
-flowchart LR
-    Ball[悬浮球] -- 点击 --> Prompt[输入条]
-    Prompt -- Enter --> Waiting[加载球]
-    Waiting -- 首字到达 --> Response[回复面板]
-    Response -- 结束常驻 --> Prompt
-    Prompt -- Wrench --> Settings[设置页]
-    Settings -- Minus --> Prompt
-```
+- [ ] 提供更完整的安装与使用演示素材
+- [ ] 完善更多平台下的使用体验细节
+- [ ] 持续优化窗口交互与稳定性
 
-窗口状态机：`Floating → Prompt → Waiting → Response ⇄ Settings`，所有过渡由 Rust 原生窗口动画驱动，切换可中断、可回滚。
+## Contributing
 
-## 许可证
+欢迎提交 Issue 和 PR。  
+在贡献前，建议先阅读现有代码结构，并在本地通过测试后再提交。
+
+## License
 
 MIT
