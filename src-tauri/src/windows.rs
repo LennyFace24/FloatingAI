@@ -612,6 +612,81 @@ async fn animate_expand_with_region(
     }
 }
 
+/// region 扩张动画循环（无前端等待）：位置从锚点平移到目标位置，region 从初始矩形扩张到全窗口。
+#[cfg(windows)]
+async fn animate_region_expand(
+    app: &AppHandle,
+    window: &WebviewWindow,
+    anchor_position: PhysicalPosition<i32>,
+    target: WindowBounds,
+    initial_region: RegionRect,
+    full_region: RegionRect,
+    duration: Duration,
+    reduced_motion: bool,
+) -> tauri::Result<AnimationOutcome> {
+    if let TransitionPlan::Direct([exact_target]) = transition_plan(reduced_motion, target) {
+        set_window_bounds(window, exact_target)?;
+        restore_transparent_background(app, window);
+        return Ok(AnimationOutcome::Completed);
+    }
+    let hwnd = window.hwnd()?.0 as isize;
+    let generation = ANIMATION_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut has_region = false;
+        let started = Instant::now();
+        loop {
+            if ANIMATION_GENERATION.load(Ordering::SeqCst) != generation {
+                if has_region {
+                    unsafe { SetWindowRgn(hwnd as _, std::ptr::null_mut(), 1) };
+                }
+                return Ok(AnimationOutcome::Cancelled);
+            }
+            let elapsed = started.elapsed().as_secs_f64();
+            let raw = (elapsed / duration.as_secs_f64()).min(1.0);
+            let p = ease_out_cubic(raw);
+            let x = interpolate_i32(anchor_position.x, target.position.x, p);
+            let y = interpolate_i32(anchor_position.y, target.position.y, p);
+            let region = RECT {
+                left: interpolate_i32(initial_region.left, 0, p),
+                top: interpolate_i32(initial_region.top, 0, p),
+                right: interpolate_i32(initial_region.right, full_region.right, p),
+                bottom: interpolate_i32(initial_region.bottom, full_region.bottom, p),
+            };
+            if unsafe {
+                SetWindowPos(
+                    hwnd as _,
+                    std::ptr::null_mut(),
+                    x,
+                    y,
+                    0,
+                    0,
+                    SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER | SWP_ASYNCWINDOWPOS,
+                )
+            } == 0
+            {
+                if has_region {
+                    unsafe { SetWindowRgn(hwnd as _, std::ptr::null_mut(), 1) };
+                }
+                return Err(tauri::Error::Io(std::io::Error::last_os_error()));
+            }
+            let hrgn =
+                unsafe { CreateRectRgn(region.left, region.top, region.right, region.bottom) };
+            if hrgn != std::ptr::null_mut() && unsafe { SetWindowRgn(hwnd as _, hrgn, 1) } != 0 {
+                has_region = true;
+            }
+            if raw >= 1.0 {
+                if has_region {
+                    unsafe { SetWindowRgn(hwnd as _, std::ptr::null_mut(), 1) };
+                }
+                return Ok(AnimationOutcome::Completed);
+            }
+            std::thread::sleep(Duration::from_millis(4));
+        }
+    })
+    .await
+    .map_err(|e| tauri::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?
+}
+
 pub async fn start_floating_drag(app: &AppHandle) -> Result<(), String> {
     let Some(window) = app.get_webview_window(FLOATING_LABEL) else {
         return Err(tauri::Error::WindowNotFound.to_string());
@@ -761,10 +836,31 @@ async fn show_bottom_anchored(
     };
     // 统一用 region 动画（视口一次 resize 到位 + region 扩张）：
     // 逐帧 resize 会让 WebView2 每帧重新布局渲染（模糊/抖动），且扩展区域 tile 未栅格化
-    // （右侧空白）。region 方案窗口一步到位，视口不逐帧变，无上述副作用；
-    // 窗口尺寸的「形变」观感由 region 扩张 + 前端交叉淡化共同呈现。
-    // 内部已在 resize 到位后等待前端渲染完成。
-    let outcome = animate_expand_with_region(app, &window, current, target, duration, reduced_motion).await?;
+    // （右侧空白）。region 方案窗口一步到位，视口不逐帧变，无上述副作用。
+    // 设置页→输入条：内部会等前端渲染完（交叉淡化需要），且前端已渲染过设置页。
+    // 悬浮球→输入条：前端 showAssistantPhase 等本命令返回才 setSurface('chat')，
+    // surface_ready 依赖 surface 变化触发，若在此等待会互相等待（前端等命令返回、
+    // 命令等前端 surfaceReady）→ 永久卡死。故悬浮球路径不等待。
+    let outcome = if from_settings {
+        animate_expand_with_region(app, &window, current, target, duration, reduced_motion).await?
+    } else {
+        // 悬浮球→输入条：直接动画（视口一次 resize 到位 + region 扩张，无逐帧 resize）
+        #[cfg(windows)]
+        {
+            let ExpandGeometry { anchor_position, initial_region, full_region } =
+                expand_geometry(current, target);
+            set_window_bounds(&window, WindowBounds {
+                position: anchor_position,
+                size: target.size,
+            })?;
+            restore_transparent_background(app, &window);
+            animate_region_expand(app, &window, anchor_position, target, initial_region, full_region, duration, reduced_motion).await?
+        }
+        #[cfg(not(windows))]
+        {
+            animate_window_bounds(app, &window, current, target, duration, reduced_motion).await?
+        }
+    };
     if outcome.should_finish_transition() {
         window.set_focus()?;
     }
