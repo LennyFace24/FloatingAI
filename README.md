@@ -1,10 +1,14 @@
+<div align="center">
+
 # FloatingAI
 
 ![platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-2b2b2b)
 ![license](https://img.shields.io/badge/license-MIT-2b2b2b)
 
-FloatingAI 是一个常驻桌面的悬浮式 AI 助手。  
-它把聊天入口放在屏幕边缘：需要时随手呼出，不需要时尽量不打扰当前工作流。
+**一个常驻桌面的悬浮式 AI 助手。**  
+把聊天入口放在屏幕边缘：需要时随手呼出，不需要时尽量不打扰当前工作流。
+
+</div>
 
 ## 概览
 
