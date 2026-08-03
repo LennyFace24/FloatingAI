@@ -195,7 +195,23 @@ export default function App() {
   }
 
   async function returnToAssistant() {
-    await showAssistantPhase(deriveAssistantPhase(conversationRef.current));
+    const phase = deriveAssistantPhase(conversationRef.current);
+    const messages = conversationRef.current.messages;
+    // 历史记录较多/含图片时，渲染（KaTeX、图片解码）可能耗时：
+    // 先切到悬浮球（无动画延迟），等渲染完成再展开——避免动画期间卡顿/渲染不完全。
+    const heavy =
+      messages.length > 15 ||
+      messages.some((message) => message.imageUrl || message.content.includes('```') || message.content.includes('$'));
+    if (heavy) {
+      // 立即显示悬浮球（前端 + Rust 同步）
+      setSurface('floating');
+      await commands.showFloatingBall(prefersReducedMotion()).catch(() => undefined);
+      // 双 rAF：确保 React commit 完成、重内容（KaTeX/图片）布局渲染完
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
+    }
+    await showAssistantPhase(phase);
   }
 
   if (surface === 'settings') {
