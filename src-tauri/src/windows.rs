@@ -509,8 +509,12 @@ async fn animate_expand_with_region(
         // DefaultBackgroundColor 会重置为默认白色，导致圆角外透明区域短暂显示白色尖角。
         let app = app.clone();
         let webview = window.clone();
-        return tauri::async_runtime::spawn_blocking(move || {
-            // 同步设最终尺寸与锚点位置：等待 WM_SIZE 处理完，WebView2 视口一次 resize。
+
+        // 阶段 1：同步设最终尺寸与锚点位置 + region 裁为初始矩形。
+        // 此时 WebView2 视口即目标尺寸，relayout 完整内容；region 只控制可见区域。
+        // 必须在等待前端之前完成——否则前端在小视口渲染、大尺寸内容 tile 未栅格化，
+        // region 扩张时新区域是空白（表现为「只渲染左侧一小部分」）。
+        tauri::async_runtime::spawn_blocking(move || {
             if unsafe {
                 SetWindowPos(
                     hwnd as _,
@@ -526,8 +530,6 @@ async fn animate_expand_with_region(
                 return Err(tauri::Error::Io(std::io::Error::last_os_error()));
             }
             restore_transparent_background(&app, &webview);
-
-            let mut has_region = false;
             let initial_hrgn = unsafe {
                 CreateRectRgn(
                     initial_region.left,
@@ -536,10 +538,20 @@ async fn animate_expand_with_region(
                     initial_region.bottom,
                 )
             };
-            if initial_hrgn != std::ptr::null_mut() && unsafe { SetWindowRgn(hwnd as _, initial_hrgn, 1) } != 0 {
-                has_region = true;
+            if initial_hrgn != std::ptr::null_mut() {
+                unsafe { SetWindowRgn(hwnd as _, initial_hrgn, 1) };
             }
+            Ok(())
+        })
+        .await
+        .map_err(|e| tauri::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))??;
 
+        // 阶段 2：等前端在目标视口渲染完目标 surface（双 rAF 后调用 surface_ready）。
+        wait_for_surface_ready().await;
+
+        // 阶段 3：region 扩张动画，位置从锚点平移到目标位置。
+        return tauri::async_runtime::spawn_blocking(move || {
+            let mut has_region = false;
             let started = Instant::now();
             loop {
                 if ANIMATION_GENERATION.load(Ordering::SeqCst) != generation {
@@ -740,18 +752,24 @@ async fn show_bottom_anchored(
     };
     apply_always_on_top(app, &window);
     window.set_resizable(false)?;
-    // 动画前切换前端到目标 surface：动画展示的是目标 UI 本身被 region 展开/收起，
-    // 而非旧 surface 的裁切。等前端渲染完再启动动画（见 wait_for_surface_ready）。
+    // 动画前切换前端到目标 surface：动画展示的是目标 UI 本身，而非旧 surface 的裁切。
     window.emit("surface://changed", "chat")?;
-    wait_for_surface_ready().await;
     let duration = if from_settings {
         SETTINGS_RETURN_DURATION
     } else {
         EXPAND_DURATION
     };
-    // 设置页→输入条：宽度 460→640 属放大方向，逐帧 resize 会让右半区域 tile 逐块补渲染。
-    // 与放大路径一致用 region 动画（视口一次到位 + region 扩张）。
-    let outcome = animate_expand_with_region(app, &window, current, target, duration, reduced_motion).await?;
+    let outcome = if from_settings {
+        // 设置页→输入条：用户要宽高动态变化（非瞬间切换），用逐帧 resize。
+        // 前端输入条宽度 min(640px, 100vw) 随视口自适应，动画即窗口与内容一起形变。
+        // 等前端渲染完再动画，避免动画开始时还是设置页内容。
+        wait_for_surface_ready().await;
+        animate_window_bounds(app, &window, current, target, duration, reduced_motion).await?
+    } else {
+        // 悬浮球→输入条：大幅放大路径用 region 动画（视口一次到位 + region 扩张），
+        // 内部已在 resize 到位后等待前端渲染完成。
+        animate_expand_with_region(app, &window, current, target, duration, reduced_motion).await?
+    };
     if outcome.should_finish_transition() {
         window.set_focus()?;
     }
@@ -812,8 +830,7 @@ pub async fn show_settings_panel(app: &AppHandle, reduced_motion: bool) -> tauri
     window.set_resizable(false)?;
     window.emit("surface://changed", "settings")?;
     window.show()?;
-    // 设置页是懒加载（Suspense），必须等其渲染完成再动画
-    wait_for_surface_ready().await;
+    // region 动画内部已：resize 到位 → 等前端渲染（设置页懒加载 Suspense）→ 扩张
     let outcome = animate_expand_with_region(app, &window, current, target, EXPAND_DURATION, reduced_motion).await?;
     if outcome.should_finish_transition() {
         window.set_focus()?;

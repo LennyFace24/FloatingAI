@@ -78,11 +78,8 @@ button { color: inherit; }
 }
 
 .chat-panel,
-.assistant-response { display: grid; grid-template-rows: 48px minmax(0, 1fr) auto; }
-.settings-panel { display: grid; grid-template-rows: 48px 1fr; }
-
 .assistant-prompt {
-  width: 640px;
+  width: min(640px, 100vw);
   height: 58px;
   display: block;
   border-radius: 14px;
