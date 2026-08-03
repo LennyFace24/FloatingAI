@@ -196,11 +196,13 @@ pub fn run() {
             show_floating_ball,
             show_settings_panel,
             hide_all_windows,
+            windows::surface_ready,
             get_settings,
             save_settings,
+            start_chat,
             ai::list_models,
             voice::transcribe_audio,
-            stop_chat
+            stop_chat,
         ])
         .setup(|app| {
             tray::setup_tray(app.handle())?;

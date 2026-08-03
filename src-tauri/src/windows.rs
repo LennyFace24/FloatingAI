@@ -39,6 +39,26 @@ static ANIMATION_GENERATION: AtomicU64 = AtomicU64::new(0);
 static MOVE_PERSISTENCE_GENERATION: AtomicU64 = AtomicU64::new(0);
 const MOVE_PERSISTENCE_DELAY: Duration = Duration::from_millis(120);
 
+/// 前端渲染完成的确认信号：Rust emit `surface://changed` 后，前端渲染完目标 surface
+/// 会调用 `surface_ready` 命令，动画据此才启动——避免动画开始而前端仍是旧内容。
+static SURFACE_READY_TX: tokio::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>> =
+    tokio::sync::Mutex::const_new(None);
+
+/// 前端调用的就绪信号（命令 `surface_ready`）。
+#[tauri::command]
+pub async fn surface_ready() {
+    if let Some(sender) = SURFACE_READY_TX.lock().await.take() {
+        let _ = sender.send(());
+    }
+}
+
+/// 等待前端渲染完成（最多 800ms，超时继续以免卡住动画）。
+async fn wait_for_surface_ready() {
+    let (sender, receiver) = tokio::sync::oneshot::channel::<()>();
+    *SURFACE_READY_TX.lock().await = Some(sender);
+    let _ = tokio::time::timeout(Duration::from_millis(800), receiver).await;
+}
+
 fn is_latest_move(move_generation: u64, current_generation: u64) -> bool {
     move_generation == current_generation
 }
@@ -720,15 +740,17 @@ async fn show_bottom_anchored(
     };
     apply_always_on_top(app, &window);
     window.set_resizable(false)?;
-    // 动画前切换前端到目标 surface（与展开路径一致）：
-    // - 悬浮球展开输入条：动画期间显示输入条被 region 展开
-    // - 设置页返回输入条：动画期间显示输入条逐渐展开，而非设置页裁切矩形
+    // 动画前切换前端到目标 surface：动画展示的是目标 UI 本身被 region 展开/收起，
+    // 而非旧 surface 的裁切。等前端渲染完再启动动画（见 wait_for_surface_ready）。
     window.emit("surface://changed", "chat")?;
+    wait_for_surface_ready().await;
     let duration = if from_settings {
         SETTINGS_RETURN_DURATION
     } else {
         EXPAND_DURATION
     };
+    // 设置页→输入条：宽度 460→640 属放大方向，逐帧 resize 会让右半区域 tile 逐块补渲染。
+    // 与放大路径一致用 region 动画（视口一次到位 + region 扩张）。
     let outcome = animate_expand_with_region(app, &window, current, target, duration, reduced_motion).await?;
     if outcome.should_finish_transition() {
         window.set_focus()?;
@@ -767,6 +789,8 @@ pub async fn show_floating_ball(app: &AppHandle, reduced_motion: bool) -> tauri:
     window.emit("surface://changed", "floating")?;
     apply_always_on_top(app, &window);
     window.show()?;
+    // 等前端渲染完悬浮球再动画：动画展示的是悬浮球（钉左上角）随窗口收缩保持可见
+    wait_for_surface_ready().await;
     let outcome = animate_window_bounds(app, &window, current, target, COLLAPSE_DURATION, reduced_motion).await?;
     if !outcome.should_finish_transition() {
         return Ok(());
@@ -788,6 +812,8 @@ pub async fn show_settings_panel(app: &AppHandle, reduced_motion: bool) -> tauri
     window.set_resizable(false)?;
     window.emit("surface://changed", "settings")?;
     window.show()?;
+    // 设置页是懒加载（Suspense），必须等其渲染完成再动画
+    wait_for_surface_ready().await;
     let outcome = animate_expand_with_region(app, &window, current, target, EXPAND_DURATION, reduced_motion).await?;
     if outcome.should_finish_transition() {
         window.set_focus()?;

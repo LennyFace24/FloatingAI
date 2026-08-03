@@ -43,6 +43,22 @@ export default function App() {
   const [conversation, setConversation] = useState(initialConversationState);
   const assistantPhase = deriveAssistantPhase(conversation);
 
+  // surface 切换后通知 Rust 渲染完成（双 rAF 确保当前帧已提交到 WebView2），
+  // Rust 据此才开始窗口动画——否则动画期间显示的是旧 surface 内容。
+  useEffect(() => {
+    let frame1 = 0;
+    let frame2 = 0;
+    frame1 = requestAnimationFrame(() => {
+      frame2 = requestAnimationFrame(() => {
+        void commands.surfaceReady().catch(() => undefined);
+      });
+    });
+    return () => {
+      cancelAnimationFrame(frame1);
+      cancelAnimationFrame(frame2);
+    };
+  }, [surface]);
+
   async function syncNativePhase(phase: AssistantPhase) {
     const reducedMotion = prefersReducedMotion();
     if (phase === 'prompt') await commands.showPromptBar(reducedMotion);

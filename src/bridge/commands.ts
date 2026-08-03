@@ -60,4 +60,5 @@ export const commands = {
     invoke<void>('start_chat', { requestId, messages }),
   stopChat: (requestId: string) => invoke<void>('stop_chat', { requestId }),
   listModels: (scope: 'chat' | 'voice') => invoke<string[]>('list_models', { scope }),
+  surfaceReady: () => invoke<void>('surface_ready'),
 };
