@@ -43,13 +43,23 @@ const MOVE_PERSISTENCE_DELAY: Duration = Duration::from_millis(120);
 /// 会调用 `surface_ready` 命令，动画据此才启动——避免动画开始而前端仍是旧内容。
 static SURFACE_READY_TX: tokio::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>> =
     tokio::sync::Mutex::const_new(None);
+/// 前端首次加载完成的标志：surface_ready 首次调用时置位。
+/// 首次启动 WebView 未加载完时点击悬浮球，不做窗口动画（直接设目标尺寸），
+/// 避免 resize 期间 WebView 内容未渲染导致的「输入框渲染一半/空白」。
+static FRONTEND_READY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// 前端调用的就绪信号（命令 `surface_ready`）。
 #[tauri::command]
 pub async fn surface_ready() {
+    FRONTEND_READY.store(true, std::sync::atomic::Ordering::SeqCst);
     if let Some(sender) = SURFACE_READY_TX.lock().await.take() {
         let _ = sender.send(());
     }
+}
+
+/// 前端是否已完成首次加载。
+pub fn frontend_ready() -> bool {
+    FRONTEND_READY.load(std::sync::atomic::Ordering::SeqCst)
 }
 
 /// 等待前端渲染完成（最多 800ms，超时继续以免卡住动画）。
@@ -765,7 +775,18 @@ async fn show_bottom_anchored(
     // （右侧空白）。region 方案窗口一步到位，视口不逐帧变，无上述副作用。
     // 内部先 resize 到位 → 等前端渲染（surface_ready）→ region 扩张。
     // 前端 showAssistantPhase 已先 setSurface('chat')，surfaceReady 能正常触发。
-    let outcome = animate_expand_with_region(app, &window, current, target, duration, reduced_motion).await?;
+    // 首次启动 WebView 未加载完（frontend_ready=false）：直接设目标尺寸不做动画，
+    // 避免 resize 期间 WebView 内容未渲染导致的「渲染一半/空白」。
+    let outcome = if !from_settings && !frontend_ready() {
+        // 首次启动 WebView 未加载完：等前端渲染完输入条（最多 800ms），
+        // 再直接设目标尺寸——不做 region 动画，避免 resize 期间空白/渲染一半。
+        wait_for_surface_ready().await;
+        set_window_bounds(&window, target)?;
+        restore_transparent_background(app, &window);
+        AnimationOutcome::Completed
+    } else {
+        animate_expand_with_region(app, &window, current, target, duration, reduced_motion).await?
+    };
     if outcome.should_finish_transition() {
         window.set_focus()?;
     }
