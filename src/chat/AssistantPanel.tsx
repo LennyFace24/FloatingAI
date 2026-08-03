@@ -179,12 +179,13 @@ export function AssistantPanel({
         />
 
         {pendingImage ? (
-          <div className="image-preview">
+          <div className="image-preview" data-placement="top-left">
             <img src={pendingImage} alt="待发送图片" />
             <button
               type="button"
               className="image-preview-remove"
               aria-label="移除图片"
+              title="移除图片"
               onClick={() => setPendingImage(null)}
             >
               ×

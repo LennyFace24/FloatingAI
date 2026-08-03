@@ -362,13 +362,15 @@ button { color: inherit; }
 .image-preview {
   position: relative;
   flex: 0 0 auto;
-  margin: 6px 10px 0;
+  align-self: flex-end;
+  order: -1;
+  margin: 0 8px 4px 0;
   max-width: 120px;
 }
 .image-preview img {
   display: block;
   max-width: 120px;
-  max-height: 72px;
+  max-height: 64px;
   border: 1px solid #333;
   border-radius: 8px;
   background: #000;
