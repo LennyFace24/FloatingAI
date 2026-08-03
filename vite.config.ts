@@ -14,14 +14,16 @@ export default defineConfig(async () => ({
   clearScreen: false,
   // 2. tauri expects a fixed port, fail if that port is not available
   server: {
-    port: 1420,
+    // 1420 在 Windows 排除端口范围 1355-1454 内（Hyper-V/WSL 保留），EACCES；
+    // 改用 1520（避开 1355-1454 与 1545-1944 两段排除范围）。
+    port: 1520,
     strictPort: true,
     host: host || false,
     hmr: host
       ? {
           protocol: "ws",
           host,
-          port: 1421,
+          port: 1521,
         }
       : undefined,
     watch: {
