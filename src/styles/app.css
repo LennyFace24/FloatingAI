@@ -137,7 +137,7 @@ button { color: inherit; }
   animation: waiting-spin 800ms linear infinite;
 }
 
-.assistant-response { overflow: hidden; }
+.assistant-response { display: grid; grid-template-rows: 48px minmax(0, 1fr) auto; overflow: hidden; }
 
 .panel-header {
   min-height: 48px;
