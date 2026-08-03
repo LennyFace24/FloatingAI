@@ -154,6 +154,22 @@ export function AssistantPanel({
       data-response-composer={phase === 'response' ? '' : undefined}
       onSubmit={handleSubmit}
     >
+      {pendingImage ? (
+        <div className="image-preview-row">
+          <div className="image-preview">
+            <img src={pendingImage} alt="待发送图片" />
+            <button
+              type="button"
+              className="image-preview-remove"
+              aria-label="移除图片"
+              title="移除图片"
+              onClick={() => setPendingImage(null)}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      ) : null}
       <div className="composer">
 
         <textarea
@@ -171,21 +187,6 @@ export function AssistantPanel({
             }
           }}
         />
-
-        {pendingImage ? (
-          <div className="image-preview" data-placement="top-left">
-            <img src={pendingImage} alt="待发送图片" />
-            <button
-              type="button"
-              className="image-preview-remove"
-              aria-label="移除图片"
-              title="移除图片"
-              onClick={() => setPendingImage(null)}
-            >
-              ×
-            </button>
-          </div>
-        ) : null}
 
         <IconButton
           label="上传图片"

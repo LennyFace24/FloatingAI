@@ -3,6 +3,7 @@ import { commands, type AppSettings, type MultimodalContentPart } from './bridge
 import { events } from './bridge/events';
 import { AssistantPanel } from './chat/AssistantPanel';
 import { deriveAssistantPhase, type AssistantPhase } from './chat/assistantSurface';
+import { modelSupportsVision } from './chat/visionSupport';
 import {
   buildProviderMessages,
   conversationReducer,
@@ -117,13 +118,32 @@ export default function App() {
   }
 
   async function sendMessage(content: string | MultimodalContentPart[]) {
+    // 带图消息：模型不支持图片时拦截并提示（参考 Claude Code 行为）
+    if (Array.isArray(content) && !modelSupportsVision(settingsForm.model)) {
+      const requestId = crypto.randomUUID();
+      dispatchConversation({
+        type: 'error',
+        requestId,
+        message: `当前模型（${settingsForm.model}）不支持图片输入，请更换支持视觉的模型或移除图片。`,
+      });
+      return requestId;
+    }
+
     const requestId = crypto.randomUUID();
     const providerMessages = [
       ...buildProviderMessages(conversationRef.current.messages),
       { role: 'user' as const, content },
     ];
 
-    dispatchConversation({ type: 'send', requestId, content: typeof content === 'string' ? content : '[图片]' });
+    // 显示内容：多模态时取文本部分 + 图片标记（文字不能丢）；纯文本直接用
+    const displayContent =
+      typeof content === 'string'
+        ? content
+        : content
+            .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
+            .map((part) => part.text)
+            .join(' ') || '[图片]';
+    dispatchConversation({ type: 'send', requestId, content: displayContent });
     try {
       await syncNativePhase('waiting');
       await commands.startChat(requestId, providerMessages);
@@ -136,7 +156,6 @@ export default function App() {
     }
     return requestId;
   }
-
   async function stopMessage(requestId: string) {
     await commands.stopChat(requestId);
     if (conversationRef.current.activeRequestId !== requestId) return;
