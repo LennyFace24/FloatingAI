@@ -38,6 +38,9 @@ textarea { font: inherit; }
 button { color: inherit; }
 
 .floating-ball {
+  position: fixed;
+  top: 0;
+  left: 0;
   border: 1px solid #353535;
   border-radius: 50%;
   color: var(--text-primary);

@@ -718,18 +718,15 @@ async fn show_bottom_anchored(
     };
     apply_always_on_top(app, &window);
     window.set_resizable(false)?;
-    if !from_settings {
-        window.emit("surface://changed", "chat")?;
-        window.show()?;
-    }
+    // 动画前切换前端到目标 surface（与展开路径一致）：
+    // - 悬浮球展开输入条：动画期间显示输入条被 region 展开
+    // - 设置页返回输入条：动画期间显示输入条逐渐展开，而非设置页裁切矩形
+    window.emit("surface://changed", "chat")?;
+    window.show()?;
     // 设置页→输入条：宽度 460→640 属放大方向，逐帧 resize 会让右半区域 tile 逐块补渲染。
-    // 与放大路径一致用 region 动画（视口一次到位 + region 扩张），emit 仍推迟到动画后。
+    // 与放大路径一致用 region 动画（视口一次到位 + region 扩张）。
     let outcome = animate_expand_with_region(app, &window, current, target, EXPAND_DURATION, reduced_motion).await?;
     if outcome.should_finish_transition() {
-        if from_settings {
-            window.emit("surface://changed", "chat")?;
-            window.show()?;
-        }
         window.set_focus()?;
     }
     Ok(outcome)
@@ -761,13 +758,15 @@ pub async fn show_floating_ball(app: &AppHandle, reduced_motion: bool) -> tauri:
         size,
     };
     window.set_resizable(false)?;
+    // 动画前先切换前端到悬浮球：动画期间 WebView2 渲染的是悬浮球（钉窗口左上角），
+    // 窗口逐帧缩小时球始终可见、结束即完整悬浮球——避免「输入框左上角裁切小方块」的突变。
+    window.emit("surface://changed", "floating")?;
+    apply_always_on_top(app, &window);
+    window.show()?;
     let outcome = animate_window_bounds(app, &window, current, target, COLLAPSE_DURATION, reduced_motion).await?;
     if !outcome.should_finish_transition() {
         return Ok(());
     }
-    window.emit("surface://changed", "floating")?;
-    apply_always_on_top(app, &window);
-    window.show()?;
     window.set_focus()?;
     set_window_mode(WindowMode::Floating);
     Ok(())
