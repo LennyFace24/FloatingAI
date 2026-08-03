@@ -154,8 +154,9 @@ export function AssistantPanel({
       data-response-composer={phase === 'response' ? '' : undefined}
       onSubmit={handleSubmit}
     >
-      {pendingImage ? (
-        <div className="image-preview-row">
+      <div className="composer">
+
+        {pendingImage ? (
           <div className="image-preview">
             <img src={pendingImage} alt="待发送图片" />
             <button
@@ -168,9 +169,7 @@ export function AssistantPanel({
               ×
             </button>
           </div>
-        </div>
-      ) : null}
-      <div className="composer">
+        ) : null}
 
         <textarea
           ref={inputRef}
@@ -187,6 +186,7 @@ export function AssistantPanel({
             }
           }}
         />
+
 
         <IconButton
           label="上传图片"
