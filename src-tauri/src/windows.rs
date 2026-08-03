@@ -564,10 +564,10 @@ async fn animate_expand_with_region(
             let mut has_region = false;
             let started = Instant::now();
             loop {
-                if ANIMATION_GENERATION.load(Ordering::SeqCst) != generation {
-                    if has_region {
-                        unsafe { SetWindowRgn(hwnd as _, std::ptr::null_mut(), 1) };
-                    }
+                let cancelled = ANIMATION_GENERATION.load(Ordering::SeqCst) != generation;
+                if cancelled {
+                    // 被新动画接管：不清 region——新动画会管理自己的 region，
+                    // 若在此清空会把新动画刚设的 region 误清（矩形边框残留/丢失）。
                     return Ok(AnimationOutcome::Cancelled);
                 }
                 let elapsed = started.elapsed().as_secs_f64();
@@ -593,7 +593,7 @@ async fn animate_expand_with_region(
                     )
                 } == 0
                 {
-                    if has_region {
+                    if has_region && ANIMATION_GENERATION.load(Ordering::SeqCst) == generation {
                         unsafe { SetWindowRgn(hwnd as _, std::ptr::null_mut(), 1) };
                     }
                     return Err(tauri::Error::Io(std::io::Error::last_os_error()));
@@ -604,7 +604,7 @@ async fn animate_expand_with_region(
                     has_region = true;
                 }
                 if raw >= 1.0 {
-                    if has_region {
+                    if has_region && ANIMATION_GENERATION.load(Ordering::SeqCst) == generation {
                         unsafe { SetWindowRgn(hwnd as _, std::ptr::null_mut(), 1) };
                     }
                     return Ok(AnimationOutcome::Completed);

@@ -122,15 +122,28 @@ export default function App() {
 
   async function sendMessage(content: string | MultimodalContentPart[]) {
     const requestId = crypto.randomUUID();
+    // 提取文本与图片 data URI（本地展示用）
+    const textPart = Array.isArray(content)
+      ? content
+          .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
+          .map((part) => part.text)
+          .join(' ')
+          .trim()
+      : content;
+    const imageUrl = Array.isArray(content)
+      ? content.find((part): part is { type: 'image_url'; image_url: { url: string } } => part.type === 'image_url')
+          ?.image_url.url
+      : undefined;
+
     // 带图消息：模型不支持图片时拦截——先入列用户消息并进入 loading，
-    // 再 dispatch error 让 reducer 显示错误（error 需 activeRequestId 匹配）。
+    // 再 dispatch error（错误入列 assistant 消息，带入后续上下文）。
     if (Array.isArray(content) && !modelSupportsVision(settingsForm.model)) {
-      const text = content
-        .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
-        .map((part) => part.text)
-        .join(' ')
-        .trim();
-      dispatchConversation({ type: 'send', requestId, content: text || '[图片]' });
+      dispatchConversation({
+        type: 'send',
+        requestId,
+        content: textPart || '[图片]',
+        imageUrl,
+      });
       try {
         await syncNativePhase('waiting');
       } finally {
@@ -139,7 +152,6 @@ export default function App() {
           requestId,
           message: `当前模型（${settingsForm.model}）不支持图片输入，请更换支持视觉的模型或移除图片。`,
         });
-        // 错误显示在响应面板（deriveAssistantPhase('error') = response）
         await syncNativePhase('response').catch(() => undefined);
       }
       return requestId;
@@ -150,15 +162,12 @@ export default function App() {
       { role: 'user' as const, content },
     ];
 
-    // 显示内容：多模态时取文本部分 + 图片标记（文字不能丢）；纯文本直接用
-    const displayContent =
-      typeof content === 'string'
-        ? content
-        : content
-            .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
-            .map((part) => part.text)
-            .join(' ') || '[图片]';
-    dispatchConversation({ type: 'send', requestId, content: displayContent });
+    dispatchConversation({
+      type: 'send',
+      requestId,
+      content: textPart || '[图片]',
+      imageUrl,
+    });
     try {
       await syncNativePhase('waiting');
       await commands.startChat(requestId, providerMessages);

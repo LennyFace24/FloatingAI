@@ -58,7 +58,7 @@ describe('conversationReducer', () => {
     expect(stopped.messages[1].finishReason).toBe('stopped');
   });
 
-  it('removes the empty assistant placeholder but keeps the prompt on a first-token error', () => {
+  it('replaces the empty assistant placeholder with the error message (kept in context)', () => {
     const streaming = conversationReducer(initialConversationState, {
       type: 'send', requestId: 'req-1', content: 'hello',
     });
@@ -69,7 +69,16 @@ describe('conversationReducer', () => {
     expect(failed).toEqual({
       status: 'error',
       error: '网络请求失败',
-      messages: [{ id: 'user-req-1', role: 'user', content: 'hello' }],
+      messages: [
+        { id: 'user-req-1', role: 'user', content: 'hello' },
+        {
+          id: 'assistant-req-1',
+          role: 'assistant',
+          content: '网络请求失败',
+          requestId: 'req-1',
+          finishReason: 'error',
+        },
+      ],
     });
   });
 

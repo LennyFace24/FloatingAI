@@ -285,12 +285,15 @@ export function AssistantPanel({
           <div className="message-content" data-response-content>
             {conversation.messages.map((message) => (
               <article className={`message message-${message.role}`} key={message.id}>
+                {message.imageUrl ? (
+                  <img className="message-image" src={message.imageUrl} alt="发送的图片" />
+                ) : null}
                 {message.role === 'assistant' ? <RichMessage content={message.content} /> : <p>{message.content}</p>}
                 {message.finishReason === 'stopped' ? <small className="message-state">已停止</small> : null}
               </article>
             ))}
             {conversation.error ? <p className="chat-error" role="alert">{conversation.error}</p> : null}
-          </div>
+           </div>
         </div>
       ) : null}
 

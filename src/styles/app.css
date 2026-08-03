@@ -222,7 +222,14 @@ button { color: inherit; }
   line-height: 1.65;
   overflow-wrap: anywhere;
 }
-.message > p { margin: 0; white-space: pre-wrap; }
+.message-image {
+  display: block;
+  max-width: 180px;
+  max-height: 120px;
+  margin-bottom: 6px;
+  border: 1px solid #333;
+  border-radius: 8px;
+}
 .message-user {
   align-self: flex-end;
   border: 1px solid rgb(255 255 255 / 14%);
