@@ -704,12 +704,10 @@ pub async fn resize_response_panel(
     };
     let current = current_bounds(&window)?;
     let target = surface_geometry(&window)?.response_bounds(content_height);
-    let from_waiting = current_window_mode() == WindowMode::Waiting;
-    let outcome = if from_waiting {
-        animate_expand_with_region(app, &window, current, target, EXPAND_DURATION, reduced_motion).await?
-    } else {
-        animate_window_bounds(app, &window, current, target, EXPAND_DURATION, reduced_motion).await?
-    };
+    // 统一 region 动画：流式时高度频繁变化，逐帧 resize 让 WebView2 每帧重排
+    // （卡顿 + 渲染不完全）。region 方案视口一次 resize 到位 + region 扩张，无此副作用。
+    let outcome =
+        animate_expand_with_region(app, &window, current, target, EXPAND_DURATION, reduced_motion).await?;
     if let Some(mode) = completed_mode(WindowMode::Response, outcome) {
         set_window_mode(mode);
     }

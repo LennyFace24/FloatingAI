@@ -50,8 +50,10 @@ export function AssistantPanel({
   const isPinnedToBottomRef = useRef(true);
   const phase = deriveAssistantPhase(conversation);
   const isStreaming = conversation.status === 'streaming';
+  // contentKey 只含消息 id + 内容长度 + finishReason——不拼全文/图片 data URI，
+  // 否则流式 delta 每帧重建整条历史字符串（图片消息可达数 MB），严重卡顿。
   const contentKey = `${conversation.status}:${conversation.error ?? ''}:${conversation.messages
-    .map((message) => `${message.id}:${message.content}:${message.finishReason ?? ''}`)
+    .map((message) => `${message.id}:${message.content.length}:${message.finishReason ?? ''}`)
     .join('|')}`;
   const latestRequestId = [...conversation.messages].reverse().find((message) => message.role === 'assistant')?.requestId;
   const responseRef = useResponseHeight({
