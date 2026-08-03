@@ -30,6 +30,8 @@ const BOTTOM_GAP: f64 = 72.0;
 const SETTINGS_WIDTH: f64 = 460.0;
 const SETTINGS_HEIGHT: f64 = 560.0;
 const EXPAND_DURATION: Duration = Duration::from_millis(280);
+/// 设置页返回输入条：跨 surface 的距离更远，稍慢的过渡观感更自然。
+const SETTINGS_RETURN_DURATION: Duration = Duration::from_millis(380);
 const COLLAPSE_DURATION: Duration = Duration::from_millis(180);
 
 const FRAME_DURATION: Duration = Duration::from_millis(8);
@@ -722,10 +724,12 @@ async fn show_bottom_anchored(
     // - 悬浮球展开输入条：动画期间显示输入条被 region 展开
     // - 设置页返回输入条：动画期间显示输入条逐渐展开，而非设置页裁切矩形
     window.emit("surface://changed", "chat")?;
-    window.show()?;
-    // 设置页→输入条：宽度 460→640 属放大方向，逐帧 resize 会让右半区域 tile 逐块补渲染。
-    // 与放大路径一致用 region 动画（视口一次到位 + region 扩张）。
-    let outcome = animate_expand_with_region(app, &window, current, target, EXPAND_DURATION, reduced_motion).await?;
+    let duration = if from_settings {
+        SETTINGS_RETURN_DURATION
+    } else {
+        EXPAND_DURATION
+    };
+    let outcome = animate_expand_with_region(app, &window, current, target, duration, reduced_motion).await?;
     if outcome.should_finish_transition() {
         window.set_focus()?;
     }
