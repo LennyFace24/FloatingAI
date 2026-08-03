@@ -121,18 +121,30 @@ export default function App() {
   }
 
   async function sendMessage(content: string | MultimodalContentPart[]) {
-    // 带图消息：模型不支持图片时拦截并提示（参考 Claude Code 行为）
+    const requestId = crypto.randomUUID();
+    // 带图消息：模型不支持图片时拦截——先入列用户消息并进入 loading，
+    // 再 dispatch error 让 reducer 显示错误（error 需 activeRequestId 匹配）。
     if (Array.isArray(content) && !modelSupportsVision(settingsForm.model)) {
-      const requestId = crypto.randomUUID();
-      dispatchConversation({
-        type: 'error',
-        requestId,
-        message: `当前模型（${settingsForm.model}）不支持图片输入，请更换支持视觉的模型或移除图片。`,
-      });
+      const text = content
+        .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
+        .map((part) => part.text)
+        .join(' ')
+        .trim();
+      dispatchConversation({ type: 'send', requestId, content: text || '[图片]' });
+      try {
+        await syncNativePhase('waiting');
+      } finally {
+        dispatchConversation({
+          type: 'error',
+          requestId,
+          message: `当前模型（${settingsForm.model}）不支持图片输入，请更换支持视觉的模型或移除图片。`,
+        });
+        // 错误显示在响应面板（deriveAssistantPhase('error') = response）
+        await syncNativePhase('response').catch(() => undefined);
+      }
       return requestId;
     }
 
-    const requestId = crypto.randomUUID();
     const providerMessages = [
       ...buildProviderMessages(conversationRef.current.messages),
       { role: 'user' as const, content },
