@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FloatingAI 图标原型对比</title>
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: #0e0e12;
+    color: #e6e6e6;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    padding: 40px 32px;
+  }
+  h1 { font-size: 18px; font-weight: 600; margin-bottom: 6px; }
+  .sub { color: #888; font-size: 13px; margin-bottom: 32px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 24px;
+    max-width: 1100px;
+  }
+  .card {
+    background: #16161c;
+    border: 1px solid #2a2a32;
+    border-radius: 14px;
+    padding: 24px 20px 18px;
+    text-align: center;
+  }
+  .card img { width: 128px; height: 128px; display: block; margin: 0 auto 14px; }
+  .card .name { font-size: 14px; font-weight: 600; }
+  .card .desc { color: #888; font-size: 12px; margin-top: 4px; line-height: 1.5; }
+  .card .letter {
+    display: inline-block;
+    margin-bottom: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #0b0b0b;
+    background: #e5e5e5;
+    border-radius: 6px;
+    padding: 2px 8px;
+  }
+</style>
+</head>
+<body>
+  <h1>FloatingAI 图标原型</h1>
+  <p class="sub">5 种风格对比 —— 挑选或混搭，告诉我编号即可</p>
+  <div class="grid">
+    <div class="card">
+      <span class="letter">A</span>
+      <img src="A-terminal.svg" alt="原型 A" />
+      <div class="name">终端合体</div>
+      <div class="desc">悬浮球 + 输入条 + 终端提示符一体成型，信息密度高，Geek 味</div>
+    </div>
+    <div class="card">
+      <span class="letter">B</span>
+      <img src="B-focus.svg" alt="原型 B" />
+      <div class="name">聚焦瞄准</div>
+      <div class="desc">准星/瞄准镜意象，强调「随时呼出、精准取用」，辨识度强</div>
+    </div>
+    <div class="card">
+      <span class="letter">C</span>
+      <img src="C-bubble.svg" alt="原型 C" />
+      <div class="name">对话泡</div>
+      <div class="desc">经典聊天气泡 + 输入省略号 + 发送箭头，语义最直白</div>
+    </div>
+    <div class="card">
+      <span class="letter">D</span>
+      <img src="D-edge.svg" alt="原型 D" />
+      <div class="name">边缘吸附</div>
+      <div class="desc">悬浮球半沉入屏幕边缘 + 下拉输入条，直接描绘产品形态</div>
+    </div>
+    <div class="card">
+      <span class="letter">E</span>
+      <img src="E-minimal.svg" alt="原型 E" />
+      <div class="name">极简 F 折线</div>
+      <div class="desc">品牌字母 F 与对话折线合一，最简洁、最适合小尺寸 favicon</div>
+    </div>
+  </div>
+</body>
+</html>

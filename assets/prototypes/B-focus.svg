@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- 原型 B：聚焦圆环 + 底部输入条 —— 瞄准/聚焦意象 -->
+  <circle cx="128" cy="100" r="58" fill="none" stroke="#e6e6e6" stroke-width="4"/>
+  <circle cx="128" cy="100" r="22" fill="#e6e6e6"/>
+  <circle cx="128" cy="100" r="6" fill="#0b0b0b"/>
+  <!-- 瞄准刻度 -->
+  <path d="M128 30 L128 46 M128 154 L128 170 M58 100 L74 100 M182 100 L198 100" stroke="#888" stroke-width="4" stroke-linecap="round"/>
+  <!-- 底部输入条 -->
+  <rect x="28" y="168" width="200" height="52" rx="14" fill="#121212" stroke="#4a4a4a" stroke-width="3"/>
+  <text x="46" y="201" font-family="monospace" font-size="20" fill="#666">&gt; 提问…</text>
+  <path d="M196 176 L196 212 M182 190 L196 212 L210 190" stroke="#e5e5e5" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- 原型 D：悬浮球吸附桌面边缘 —— 形态本身即产品概念 -->
+  <rect x="16" y="16" width="224" height="224" rx="36" fill="#0b0b0b" stroke="#3a3a3a" stroke-width="3"/>
+  <!-- 桌面边线 -->
+  <path d="M16 150 L240 150" stroke="#2a2a2a" stroke-width="4"/>
+  <!-- 悬浮球（半沉入边缘，球心在边线上） -->
+  <circle cx="150" cy="150" r="52" fill="#121212" stroke="#e6e6e6" stroke-width="4"/>
+  <text x="150" y="163" text-anchor="middle" font-family="monospace" font-size="36" font-weight="700" fill="#e6e6e6">AI</text>
+  <!-- 交互箭头：从球指向输入条 -->
+  <path d="M150 206 L150 232" stroke="#666" stroke-width="4" stroke-linecap="round"/>
+  <path d="M142 224 L150 234 L158 224" stroke="#666" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- 输入条 -->
+  <rect x="60" y="196" width="130" height="30" rx="9" fill="#141414" stroke="#555" stroke-width="2"/>
+  <text x="74" y="217" font-family="monospace" font-size="15" fill="#888">&gt;_</text>
+</svg>

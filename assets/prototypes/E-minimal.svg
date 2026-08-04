@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- 原型 E：极简符号 —— "F" 与对话折线合一，扁平标识 -->
+  <rect x="16" y="16" width="224" height="224" rx="48" fill="#0d0d0d" stroke="#3a3a3a" stroke-width="3"/>
+  <!-- 粗体 F + 对话折线（聊天曲线） -->
+  <path d="M88 64 L88 192" stroke="#e6e6e6" stroke-width="14" stroke-linecap="round"/>
+  <path d="M88 64 L152 64" stroke="#e6e6e6" stroke-width="14" stroke-linecap="round"/>
+  <path d="M88 120 L140 120" stroke="#e6e6e6" stroke-width="14" stroke-linecap="round"/>
+  <!-- 对话点 -->
+  <circle cx="88" cy="64" r="6" fill="#888"/>
+  <circle cx="152" cy="120" r="6" fill="#888"/>
+  <circle cx="176" cy="176" r="6" fill="#888"/>
+  <!-- 连接折线 -->
+  <path d="M88 64 L152 120 L176 176" stroke="#4a4a4a" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

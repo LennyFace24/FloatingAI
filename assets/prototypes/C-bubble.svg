@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- 原型 C：对话泡 + 光标 —— 聊天语义，识别度高 -->
+  <rect x="16" y="16" width="224" height="224" rx="44" fill="#0d0d0d" stroke="#3a3a3a" stroke-width="3"/>
+  <!-- 对话泡 -->
+  <path d="M128 44 C76 44 40 72 40 108 C40 132 54 152 76 164 L70 200 L108 178 C114 179 121 180 128 180 C180 180 216 152 216 116 C216 80 180 44 128 44 Z"
+        fill="#141414" stroke="#555" stroke-width="3"/>
+  <!-- 三个点（输入中的省略） -->
+  <circle cx="96" cy="112" r="7" fill="#e6e6e6"/>
+  <circle cx="128" cy="112" r="7" fill="#e6e6e6"/>
+  <circle cx="160" cy="112" r="7" fill="#e6e6e6"/>
+  <circle cx="184" cy="140" r="9" fill="#e5e5e5"/>
+  <path d="M180 140 L188 140 M184 136 L188 140 L184 144" stroke="#080808" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
