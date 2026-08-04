@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/icon.svg" alt="FloatingAI 图标" width="120" height="120" />
+
 # FloatingAI
 
 ![platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-2b2b2b)
