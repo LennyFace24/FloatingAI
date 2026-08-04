@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- 原型 G：终端光标方阵 —— 纯字形构成，块状光标 ▮ 排布 -->
+  <rect x="16" y="16" width="224" height="224" rx="40" fill="#0b0b0b" stroke="#3a3a3a" stroke-width="3"/>
+  <!-- 上方：光标块组成悬浮球（圆形排布，块状） -->
+  <rect x="86" y="52" width="20" height="20" rx="3" fill="#e6e6e6"/>
+  <rect x="112" y="44" width="20" height="20" rx="3" fill="#c9c9c9"/>
+  <rect x="138" y="44" width="20" height="20" rx="3" fill="#c9c9c9"/>
+  <rect x="164" y="52" width="20" height="20" rx="3" fill="#a0a0a0"/>
+  <rect x="74" y="76" width="20" height="20" rx="3" fill="#a0a0a0"/>
+  <rect x="176" y="76" width="20" height="20" rx="3" fill="#888"/>
+  <rect x="74" y="100" width="20" height="20" rx="3" fill="#888"/>
+  <rect x="176" y="100" width="20" height="20" rx="3" fill="#666"/>
+  <rect x="86" y="122" width="20" height="20" rx="3" fill="#666"/>
+  <rect x="112" y="128" width="20" height="20" rx="3" fill="#4a4a4a"/>
+  <rect x="138" y="128" width="20" height="20" rx="3" fill="#4a4a4a"/>
+  <rect x="164" y="122" width="20" height="20" rx="3" fill="#555"/>
+  <!-- 中央闪烁光标（签名：块状 ▮） -->
+  <rect x="123" y="86" width="10" height="26" rx="2" fill="#e6e6e6"/>
+  <!-- 输入条 -->
+  <rect x="36" y="168" width="184" height="48" rx="12" fill="#121212" stroke="#4a4a4a" stroke-width="3"/>
+  <rect x="52" y="184" width="120" height="16" rx="3" fill="#2a2a2a"/>
+  <rect x="58" y="187" width="8" height="10" rx="1" fill="#e6e6e6"/>
+</svg>

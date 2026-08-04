@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- 原型 I：阴阳对话 —— 悬浮球与输入条黑白互锁，太极式对话 -->
+  <rect x="16" y="16" width="224" height="224" rx="44" fill="#0d0d0d" stroke="#3a3a3a" stroke-width="3"/>
+  <!-- 大圆（黑） -->
+  <circle cx="128" cy="96" r="58" fill="#0b0b0b" stroke="#4a4a4a" stroke-width="3"/>
+  <!-- 白半圆（阴阳：右侧白色区） -->
+  <path d="M128 38 A58 58 0 0 1 128 154 Z" fill="#e6e6e6"/>
+  <!-- 黑白互嵌点 -->
+  <circle cx="128" cy="76" r="12" fill="#0b0b0b"/>
+  <circle cx="128" cy="116" r="12" fill="#e6e6e6"/>
+  <!-- 输入条 -->
+  <rect x="30" y="176" width="196" height="44" rx="12" fill="#141414" stroke="#4a4a4a" stroke-width="3"/>
+  <path d="M56 198 L170 198" stroke="#666" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="190" cy="198" r="8" fill="#e6e6e6"/>
+</svg>

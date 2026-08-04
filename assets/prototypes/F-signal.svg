@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- 原型 F：荧光信号点 —— 纯灰 + 单一终端绿高亮，boldness in one place -->
+  <rect x="16" y="16" width="224" height="224" rx="40" fill="#0b0b0b" stroke="#3a3a3a" stroke-width="3"/>
+  <!-- 悬浮球轮廓（细线） -->
+  <circle cx="128" cy="98" r="54" fill="none" stroke="#3f3f3f" stroke-width="2"/>
+  <circle cx="128" cy="98" r="54" fill="#111111" stroke="#555" stroke-width="3"/>
+  <!-- 荧光信号点（签名元素：唯一的亮色） -->
+  <circle cx="128" cy="98" r="14" fill="#7af08a"/>
+  <circle cx="128" cy="98" r="24" fill="none" stroke="#7af08a" stroke-opacity="0.35" stroke-width="2"/>
+  <!-- 信号波纹 -->
+  <path d="M96 70 Q128 40 160 70" fill="none" stroke="#3f3f3f" stroke-width="2"/>
+  <path d="M88 56 Q128 20 168 56" fill="none" stroke="#2c2c2c" stroke-width="2"/>
+  <!-- 输入条 -->
+  <rect x="30" y="176" width="196" height="44" rx="12" fill="#121212" stroke="#4a4a4a" stroke-width="3"/>
+  <path d="M54 198 L150 198" stroke="#555" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="196" cy="198" r="9" fill="#7af08a"/>
+</svg>
