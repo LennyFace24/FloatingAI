@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- 原型 S：代码球 —— 球内 </> 标签，Markdown 与代码高亮渲染 -->
+  <rect x="16" y="16" width="224" height="224" rx="44" fill="#0d0d0d" stroke="#3a3a3a" stroke-width="3"/>
+  <!-- 悬浮球：绝对主体 -->
+  <circle cx="128" cy="128" r="78" fill="#141414" stroke="#555" stroke-width="3"/>
+  <!-- </> 标签：三笔白色粗线 -->
+  <path d="M98 100 L78 128 L98 156" stroke="#e6e6e6" stroke-width="9" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M127 100 L111 156" stroke="#e6e6e6" stroke-width="9" fill="none" stroke-linecap="round"/>
+  <path d="M158 100 L178 128 L158 156" stroke="#e6e6e6" stroke-width="9" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

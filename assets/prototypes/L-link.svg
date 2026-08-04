@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- 原型 L：球泡合一 —— 悬浮球本身就是对话泡（圆 + 尾巴 + 三点省略），形态即功能 -->
+  <rect x="16" y="16" width="224" height="224" rx="44" fill="#0d0d0d" stroke="#3a3a3a" stroke-width="3"/>
+  <!-- 圆形对话泡：悬浮球本体 -->
+  <circle cx="128" cy="122" r="72" fill="#141414" stroke="#555" stroke-width="3"/>
+  <!-- 对话尾巴：从球右下缘伸出 -->
+  <path d="M170 172 L198 198 L171 198 Z" fill="#141414" stroke="#555" stroke-width="2" stroke-linejoin="round"/>
+  <!-- 三点省略：对话进行中 / 待命 -->
+  <circle cx="98" cy="122" r="8" fill="#e6e6e6"/>
+  <circle cx="128" cy="122" r="8" fill="#e6e6e6"/>
+  <circle cx="158" cy="122" r="8" fill="#e6e6e6"/>
+</svg>

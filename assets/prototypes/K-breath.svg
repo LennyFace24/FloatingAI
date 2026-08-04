@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- 原型 K：悬浮 F 球 —— 品牌字母 F 住在球里。球 = 产品形态，F = 品牌身份，一图双识 -->
+  <rect x="16" y="16" width="224" height="224" rx="44" fill="#0d0d0d" stroke="#3a3a3a" stroke-width="3"/>
+  <!-- 悬浮球：绝对主体 -->
+  <circle cx="128" cy="128" r="78" fill="#141414" stroke="#555" stroke-width="3"/>
+  <!-- 球内品牌字母 F：粗笔画，视觉中心在球心 -->
+  <path d="M107 94 L107 166" stroke="#e6e6e6" stroke-width="14" stroke-linecap="round"/>
+  <path d="M107 94 L153 94" stroke="#e6e6e6" stroke-width="14" stroke-linecap="round"/>
+  <path d="M107 127 L141 127" stroke="#e6e6e6" stroke-width="14" stroke-linecap="round"/>
+</svg>

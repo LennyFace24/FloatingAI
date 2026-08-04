@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- 原型 N：呼出输入 —— 球在上、输入条在下，一图讲清核心交互"点击悬浮球呼出输入" -->
+  <rect x="16" y="16" width="224" height="224" rx="44" fill="#0d0d0d" stroke="#3a3a3a" stroke-width="3"/>
+  <!-- 悬浮球：触发点 -->
+  <circle cx="128" cy="86" r="42" fill="#141414" stroke="#555" stroke-width="3"/>
+  <!-- 输入条：呼出的结果 -->
+  <rect x="28" y="150" width="200" height="52" rx="14" fill="#121212" stroke="#4a4a4a" stroke-width="3"/>
+  <!-- 输入占位线 -->
+  <path d="M48 176 L116 176" stroke="#555" stroke-width="3" stroke-linecap="round"/>
+  <!-- 终端块状光标：随时可输入（唯一亮色） -->
+  <rect x="150" y="164" width="7" height="24" rx="3" fill="#7af08a"/>
+</svg>

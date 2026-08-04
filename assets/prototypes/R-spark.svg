@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- 原型 R：AI 星火 —— 球心四角星，最通用的 AI 语义 -->
+  <rect x="16" y="16" width="224" height="224" rx="44" fill="#0d0d0d" stroke="#3a3a3a" stroke-width="3"/>
+  <!-- 悬浮球：绝对主体 -->
+  <circle cx="128" cy="128" r="80" fill="#141414" stroke="#555" stroke-width="3"/>
+  <!-- 四角星：球心 -->
+  <path d="M128 86 L135 121 L170 128 L135 135 L128 170 L121 135 L86 128 L121 121 Z" fill="#e6e6e6"/>
+</svg>

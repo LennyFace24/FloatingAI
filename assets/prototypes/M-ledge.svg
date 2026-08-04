@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- 原型 M：边缘嵌入 —— 球半沉入桌面边缘线。球 = 悬浮体，线 = 屏幕边缘，常驻桌面边缘 -->
+  <rect x="16" y="16" width="224" height="224" rx="44" fill="#0d0d0d" stroke="#3a3a3a" stroke-width="3"/>
+  <!-- 桌面边缘线（地平线） -->
+  <path d="M20 152 L236 152" stroke="#2e2e2e" stroke-width="4"/>
+  <!-- 悬浮球：半嵌入边缘线，球心在线下 -->
+  <circle cx="128" cy="158" r="64" fill="#141414" stroke="#555" stroke-width="3"/>
+  <!-- 待命绿点：球是"活"的，随时可呼出 -->
+  <circle cx="128" cy="130" r="7" fill="#7af08a"/>
+</svg>

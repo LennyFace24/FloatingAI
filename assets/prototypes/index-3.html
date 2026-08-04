@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FloatingAI 图标原型对比（第三批 · 修订）</title>
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: #0e0e12;
+    color: #e6e6e6;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    padding: 40px 32px;
+  }
+  h1 { font-size: 18px; font-weight: 600; margin-bottom: 6px; }
+  .sub { color: #888; font-size: 13px; margin-bottom: 24px; line-height: 1.6; }
+  .section-label {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: #666;
+    margin: 28px 0 14px;
+    text-transform: uppercase;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 22px;
+    max-width: 1200px;
+  }
+  .card {
+    background: #16161c;
+    border: 1px solid #2a2a32;
+    border-radius: 14px;
+    padding: 22px 18px 16px;
+    text-align: center;
+  }
+  .card img { width: 112px; height: 112px; display: block; margin: 0 auto 12px; }
+  .card .name { font-size: 14px; font-weight: 600; }
+  .card .desc { color: #888; font-size: 12px; margin-top: 4px; line-height: 1.5; }
+  .card .letter {
+    display: inline-block;
+    margin-bottom: 10px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #0b0b0b;
+    background: #e5e5e5;
+    border-radius: 6px;
+    padding: 2px 8px;
+  }
+  .card.baseline { border-color: #4a5a4a; }
+  .card.baseline .letter { background: #7af08a; }
+  .card.baseline .name::after { content: " · 基准"; color: #7af08a; font-size: 11px; }
+  .philosophy {
+    max-width: 1200px;
+    margin-bottom: 8px;
+    padding: 18px 20px;
+    background: #131318;
+    border: 1px solid #26262e;
+    border-radius: 14px;
+    font-size: 13px;
+    line-height: 1.7;
+    color: #aaa;
+  }
+  .philosophy strong { color: #e6e6e6; font-weight: 600; }
+  .philosophy .tag {
+    display: inline-block;
+    margin-bottom: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: #7af08a;
+    text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+  <h1>FloatingAI 图标原型 · 第三批（修订）</h1>
+  <p class="sub">K–O 重做：一球一义 —— 悬浮球为绝对主体，每张只附加一个产品语义。完整设计哲学见 <a href="philosophy-3.md" style="color:#7af08a">philosophy-3.md</a></p>
+
+  <div class="philosophy">
+    <span class="tag">一球一义 · The Orb Speaks</span><br />
+    简洁不是删去身份，而是只讲一件事。悬浮球是产品最独特的物理形态——所有原型共享铁律：<strong>球必须占据绝对主体</strong>。
+    每个图标只附加一个与产品真实功能对应的语义：品牌 F（K）、对话泡（L）、桌面边缘（M）、呼出输入（N）、随时应答（O）。
+    删掉球，图就不成立——这正是产品识别的来源。
+  </div>
+
+  <div class="section-label">新设计</div>
+  <div class="grid">
+    <div class="card">
+      <span class="letter">K</span>
+      <img src="K-breath.svg" alt="原型 K" />
+      <div class="name">悬浮 F 球</div>
+      <div class="desc">品牌字母 F 住在球里——球 = 产品形态，F = 品牌身份，一图双识</div>
+    </div>
+    <div class="card">
+      <span class="letter">L</span>
+      <img src="L-link.svg" alt="原型 L" />
+      <div class="name">球泡合一</div>
+      <div class="desc">悬浮球本身就是对话泡：圆 + 尾巴 + 三点省略，形态即功能</div>
+    </div>
+    <div class="card">
+      <span class="letter">M</span>
+      <img src="M-ledge.svg" alt="原型 M" />
+      <div class="name">边缘嵌入</div>
+      <div class="desc">球半沉入桌面边缘线——球 = 悬浮体，线 = 屏幕边缘，一图讲清常驻定位</div>
+    </div>
+    <div class="card">
+      <span class="letter">N</span>
+      <img src="N-cursor.svg" alt="原型 N" />
+      <div class="name">呼出输入</div>
+      <div class="desc">球在上、输入条在下——一图讲清核心交互"点击悬浮球呼出输入"</div>
+    </div>
+    <div class="card">
+      <span class="letter">O</span>
+      <img src="O-core.svg" alt="原型 O" />
+      <div class="name">呼之即答</div>
+      <div class="desc">球发出对话声波——球 = 助手，波纹 = 随时应答</div>
+    </div>
+  </div>
+
+  <div class="section-label">保留基准</div>
+  <div class="grid">
+    <div class="card baseline">
+      <span class="letter">E</span>
+      <img src="E-minimal.svg" alt="原型 E" />
+      <div class="name">极简 F 折线</div>
+      <div class="desc">基准：字母 F 与对话折线合一。本批把字母放回球中，让品牌与产品形态合一</div>
+    </div>
+  </div>
+</body>
+</html>

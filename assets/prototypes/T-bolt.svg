@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- 原型 T：即时唤起 —— 球内闪电，全局快捷键随时呼出 -->
+  <rect x="16" y="16" width="224" height="224" rx="44" fill="#0d0d0d" stroke="#3a3a3a" stroke-width="3"/>
+  <!-- 悬浮球：绝对主体 -->
+  <circle cx="128" cy="128" r="80" fill="#141414" stroke="#555" stroke-width="3"/>
+  <!-- 闪电：球心 -->
+  <path d="M136 76 L108 138 L126 138 L114 182 L156 114 L138 114 L150 76 Z" fill="#e6e6e6"/>
+</svg>

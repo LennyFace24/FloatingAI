@@ -1,11 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="128" height="128">
-  <!-- 悬浮球：深色圆 + 细边框 + AI 字样 -->
-  <circle cx="78" cy="64" r="46" fill="#0b0b0b" stroke="#4a4a4a" stroke-width="3"/>
-  <text x="78" y="78" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="36" font-weight="650" fill="#e6e6e6">AI</text>
-
-  <!-- 输入条：圆角矩形 + 提示符 + 发送箭头 -->
-  <rect x="24" y="168" width="208" height="52" rx="16" fill="#121212" stroke="#353535" stroke-width="3"/>
-  <text x="46" y="201" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22" fill="#666666">&gt; 输入问题…</text>
-  <circle cx="204" cy="194" r="15" fill="#e5e5e5"/>
-  <path d="M199 194 L209 194 M204 189 L209 194 L204 199" stroke="#080808" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- FloatingAI 图标：品牌字母 F 与对话折线合一 -->
+  <rect x="16" y="16" width="224" height="224" rx="48" fill="#0d0d0d" stroke="#3a3a3a" stroke-width="3"/>
+  <!-- 粗体 F + 对话折线（聊天曲线） -->
+  <path d="M88 64 L88 192" stroke="#e6e6e6" stroke-width="14" stroke-linecap="round"/>
+  <path d="M88 64 L152 64" stroke="#e6e6e6" stroke-width="14" stroke-linecap="round"/>
+  <path d="M88 120 L140 120" stroke="#e6e6e6" stroke-width="14" stroke-linecap="round"/>
+  <!-- 对话点 -->
+  <circle cx="88" cy="64" r="6" fill="#888"/>
+  <circle cx="152" cy="120" r="6" fill="#888"/>
+  <circle cx="176" cy="176" r="6" fill="#888"/>
+  <!-- 连接折线 -->
+  <path d="M88 64 L152 120 L176 176" stroke="#4a4a4a" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

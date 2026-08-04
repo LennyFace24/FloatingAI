@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- 原型 O：呼之即答 —— 球发出对话声波。球 = 助手，波纹 = 随时应答 -->
+  <rect x="16" y="16" width="224" height="224" rx="44" fill="#0d0d0d" stroke="#3a3a3a" stroke-width="3"/>
+  <!-- 悬浮球：左置，为声波留出空间 -->
+  <circle cx="98" cy="128" r="56" fill="#141414" stroke="#555" stroke-width="3"/>
+  <!-- 对话声波：三圈开口弧，从球缘向外扩散 -->
+  <path d="M154.7 80.4 A74 74 0 0 1 154.7 175.6" fill="none" stroke="#666" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M165.4 71.4 A88 88 0 0 1 165.4 184.6" fill="none" stroke="#555" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M176.1 62.4 A102 102 0 0 1 176.1 193.6" fill="none" stroke="#444" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- 待命绿点：在线信号 -->
+  <circle cx="98" cy="128" r="7" fill="#7af08a"/>
+</svg>

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- 原型 P：流式输出 —— 球旁文本行正在增长、行末光标闪烁，发送后流式返回 -->
+  <rect x="16" y="16" width="224" height="224" rx="44" fill="#0d0d0d" stroke="#3a3a3a" stroke-width="3"/>
+  <!-- 悬浮球：左置 -->
+  <circle cx="88" cy="128" r="56" fill="#141414" stroke="#555" stroke-width="3"/>
+  <!-- 流式文本行：从球缘向右，逐行缩短（输出进行中） -->
+  <path d="M158 108 L220 108" stroke="#8a8a8a" stroke-width="4" stroke-linecap="round"/>
+  <path d="M158 132 L220 132" stroke="#5a5a5a" stroke-width="4" stroke-linecap="round"/>
+  <path d="M158 156 L204 156" stroke="#5a5a5a" stroke-width="4" stroke-linecap="round"/>
+  <!-- 行末光标（唯一亮色）：正在写入 -->
+  <rect x="210" y="148" width="7" height="16" rx="3" fill="#7af08a"/>
+</svg>
