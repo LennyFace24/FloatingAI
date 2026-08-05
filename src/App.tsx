@@ -55,18 +55,27 @@ export default function App() {
   });
   const assistantPhaseRef = useRef(assistantPhase);
   assistantPhaseRef.current = assistantPhase;
-  // surface 切换后通知 Rust 渲染完成（双 rAF 确保当前帧已提交到 WebView2）
+  // surface 切换后通知 Rust 渲染完成。双 rAF 确保当前帧提交到 WebView2；
+  // 再等一次 requestIdleCallback（主线程任务排空）——重历史（KaTeX/图片/大 DOM）
+  // 的渲染跨多帧，空闲回调表示渲染稳定，Rust 此时才启动动画，避免「渲染一半」。
   useEffect(() => {
     let frame1 = 0;
     let frame2 = 0;
+    let idle: number | undefined;
+    const notify = () => void commands.surfaceReady().catch(() => undefined);
     frame1 = requestAnimationFrame(() => {
       frame2 = requestAnimationFrame(() => {
-        void commands.surfaceReady().catch(() => undefined);
+        if (typeof requestIdleCallback === 'function') {
+          idle = requestIdleCallback(notify, { timeout: 1000 });
+        } else {
+          notify();
+        }
       });
     });
     return () => {
       cancelAnimationFrame(frame1);
       cancelAnimationFrame(frame2);
+      if (idle !== undefined && typeof cancelIdleCallback === 'function') cancelIdleCallback(idle);
     };
   }, [surface]);
 

@@ -62,11 +62,12 @@ pub fn frontend_ready() -> bool {
     FRONTEND_READY.load(std::sync::atomic::Ordering::SeqCst)
 }
 
-/// 等待前端渲染完成（最多 800ms，超时继续以免卡住动画）。
+/// 等待前端渲染完成（最多 3s——重历史（KaTeX/图片/大 DOM）渲染可能跨多帧；
+/// 超时仍继续动画，避免永久卡死）。
 async fn wait_for_surface_ready() {
     let (sender, receiver) = tokio::sync::oneshot::channel::<()>();
     *SURFACE_READY_TX.lock().await = Some(sender);
-    let _ = tokio::time::timeout(Duration::from_millis(800), receiver).await;
+    let _ = tokio::time::timeout(Duration::from_millis(3000), receiver).await;
 }
 
 fn is_latest_move(move_generation: u64, current_generation: u64) -> bool {
