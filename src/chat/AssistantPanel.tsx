@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { type MultimodalContentPart } from '../bridge/commands';
 import { IconButton } from '../ui/IconButton';
 import { Minus, Wrench } from '../ui/icons';
@@ -45,6 +45,14 @@ export function AssistantPanel({
     onHeight: onContentHeight,
   });
 
+
+  // 稳定回调：MessageList memo 依赖它引用不变才跳过重渲染
+  const handleScrollPinnedChange = useCallback(
+    (pinned: boolean) => {
+      isPinnedToBottomRef.current = pinned;
+    },
+    [isPinnedToBottomRef],
+  );
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') onCollapse();
@@ -97,9 +105,7 @@ export function AssistantPanel({
           contentKey={contentKey}
           messageListRef={messageListRef}
           isPinnedToBottomRef={isPinnedToBottomRef}
-          onScrollPinnedChange={(pinned) => {
-            isPinnedToBottomRef.current = pinned;
-          }}
+          onScrollPinnedChange={handleScrollPinnedChange}
         />
       ) : null}
 

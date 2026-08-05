@@ -1,4 +1,4 @@
-import { memo, useEffect } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import type { ConversationState } from './conversation';
 import { RichMessage } from './RichMessage';
 import { isPinnedToBottom } from './useResponseHeight';
@@ -35,13 +35,16 @@ const MessageItem = memo(function MessageItem({
 });
 
 /** 消息列表：渲染 + 滚动到底部 + 错误提示。每条消息 memo，仅自身变化时重渲染。 */
-export function MessageList({
+export const MessageList = memo(function MessageList({
   conversation,
   contentKey,
   onScrollPinnedChange,
   messageListRef,
   isPinnedToBottomRef,
 }: MessageListProps) {
+  const onScrollPinnedChangeRef = useRef(onScrollPinnedChange);
+  onScrollPinnedChangeRef.current = onScrollPinnedChange;
+
   useEffect(() => {
     if (isPinnedToBottomRef.current && messageListRef.current) {
       messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
@@ -55,9 +58,9 @@ export function MessageList({
       data-response-scroll
       data-window-drag-exclude
       role="log"
-      aria-live="polite"
       onScroll={(event) => {
-        onScrollPinnedChange(isPinnedToBottom(event.currentTarget));
+        // 只写 ref（不触发渲染），同步执行代价极低
+        onScrollPinnedChangeRef.current(isPinnedToBottom(event.currentTarget));
       }}
     >
       <div className="message-content" data-response-content>
@@ -75,4 +78,4 @@ export function MessageList({
       </div>
     </div>
   );
-}
+});

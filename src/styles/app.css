@@ -198,11 +198,14 @@ button { color: inherit; }
   padding: 16px;
   scrollbar-width: thin;
   scrollbar-color: #333 transparent;
+  /* 布局隔离：消息区内部变化不触发外层回流 */
+  contain: layout paint;
 }
 .message-content {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  contain: layout paint;
 }
 
 .empty-state {
