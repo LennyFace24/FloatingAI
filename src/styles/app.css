@@ -100,7 +100,6 @@ button { color: inherit; }
   to { opacity: 1; }
 }
 
-.chat-panel,
 .assistant-prompt {
   width: min(640px, 100vw);
   height: 58px;

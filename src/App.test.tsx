@@ -51,7 +51,10 @@ vi.mock('./bridge/commands', () => ({
     saveSettings: mocks.saveSettings,
     startChat: mocks.startChat,
     stopChat: mocks.stopChat,
-  },
+    surfaceReady: () => Promise.resolve(),
+    listModels: () => Promise.resolve([]),
+    readImageFile: () => Promise.resolve(''),
+   },
 }));
 
 vi.mock('./bridge/events', () => ({
