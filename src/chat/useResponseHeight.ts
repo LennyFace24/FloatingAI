@@ -24,6 +24,9 @@ export function useResponseHeight({ contentKey, measurementSessionKey, onHeight 
   }, []);
 
   const scheduleMeasureRef = useRef<() => void>(() => undefined);
+  // 高度变化阈值：低于 4px 不触发 Rust resize，避免流式/图片渲染时
+  // 每像素都触发窗口动画（卡顿 + 渲染不完全）。
+  const MEASURE_EPSILON = 4;
   scheduleMeasureRef.current = () => {
     if (frameRef.current !== undefined) return;
     frameRef.current = requestAnimationFrame(() => {
@@ -44,7 +47,8 @@ export function useResponseHeight({ contentKey, measurementSessionKey, onHeight 
         (Number.parseFloat(containerStyle.borderTopWidth) || 0) +
         (Number.parseFloat(containerStyle.borderBottomWidth) || 0);
       const height = Math.round(contentHeight + chromeHeight);
-      if (height === lastHeightRef.current) return;
+      const previous = lastHeightRef.current;
+      if (previous !== undefined && Math.abs(height - previous) < MEASURE_EPSILON) return;
       lastHeightRef.current = height;
       onHeightRef.current(height);
     });

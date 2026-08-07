@@ -7,6 +7,29 @@ mod tray;
 mod voice;
 mod windows;
 
+/// 读取本地图片文件为 data URI（base64）。供输入条上传图片预览用——
+/// 绕过 tauri-plugin-fs 的 scope 限制（用户任意路径不在白名单内）。
+#[tauri::command]
+fn read_image_file(path: String) -> Result<String, String> {
+    let bytes = std::fs::read(&path).map_err(|error| format!("读取文件失败：{error}"))?;
+    let ext = path
+        .rsplit('.')
+        .next()
+        .unwrap_or("png")
+        .to_lowercase();
+    let mime = match ext.as_str() {
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        _ => "image/png",
+    };
+    use base64::Engine;
+    Ok(format!(
+        "data:{mime};base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    ))
+}
+
 #[tauri::command]
 async fn start_floating_drag(app: tauri::AppHandle) -> Result<(), String> {
     windows::start_floating_drag(&app)
@@ -186,6 +209,7 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(Arc::new(ai::ChatRuntime::default()))
         .invoke_handler(tauri::generate_handler![
             start_floating_drag,
             show_prompt_bar,
@@ -196,11 +220,14 @@ pub fn run() {
             show_floating_ball,
             show_settings_panel,
             hide_all_windows,
+            windows::surface_ready,
             get_settings,
             save_settings,
+            start_chat,
+            stop_chat,
             ai::list_models,
             voice::transcribe_audio,
-            stop_chat
+            read_image_file,
         ])
         .setup(|app| {
             tray::setup_tray(app.handle())?;

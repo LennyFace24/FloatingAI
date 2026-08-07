@@ -29,13 +29,48 @@ const RESPONSE_MAX_HEIGHT: f64 = 560.0;
 const BOTTOM_GAP: f64 = 72.0;
 const SETTINGS_WIDTH: f64 = 460.0;
 const SETTINGS_HEIGHT: f64 = 560.0;
-const EXPAND_DURATION: Duration = Duration::from_millis(280);
-const COLLAPSE_DURATION: Duration = Duration::from_millis(180);
-
-const FRAME_DURATION: Duration = Duration::from_millis(8);
 static ANIMATION_GENERATION: AtomicU64 = AtomicU64::new(0);
 static MOVE_PERSISTENCE_GENERATION: AtomicU64 = AtomicU64::new(0);
 const MOVE_PERSISTENCE_DELAY: Duration = Duration::from_millis(120);
+
+/// 前端渲染完成的确认信号：Rust emit `surface://changed` 后，前端渲染完目标 surface
+/// 会调用 `surface_ready` 命令，动画据此才启动——避免动画开始而前端仍是旧内容。
+static SURFACE_READY_TX: tokio::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>> =
+    tokio::sync::Mutex::const_new(None);
+/// 前端首次加载完成的标志：surface_ready 首次调用时置位。
+/// 首次启动 WebView 未加载完时点击悬浮球，不做窗口动画（直接设目标尺寸），
+/// 避免 resize 期间 WebView 内容未渲染导致的「输入框渲染一半/空白」。
+static FRONTEND_READY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// 前端调用的就绪信号（命令 `surface_ready`）。
+#[tauri::command]
+pub async fn surface_ready() {
+    FRONTEND_READY.store(true, std::sync::atomic::Ordering::SeqCst);
+    if let Some(sender) = SURFACE_READY_TX.lock().await.take() {
+        let _ = sender.send(());
+    }
+}
+
+/// 等待前端渲染完成（最多 3s——重历史（KaTeX/图片/大 DOM）渲染可能跨多帧；
+/// 超时仍继续设尺寸，避免永久卡死）。
+async fn wait_for_surface_ready() {
+    let (sender, receiver) = tokio::sync::oneshot::channel::<()>();
+    *SURFACE_READY_TX.lock().await = Some(sender);
+    let _ = tokio::time::timeout(Duration::from_millis(3000), receiver).await;
+}
+
+/// 直接设目标尺寸（无窗口动画——全面采用前端 fade 切换）。
+/// 等前端渲染完成再设，避免 resize 时 WebView2 内容未渲染导致的「渲染一半」。
+async fn set_bounds_after_ready(
+    app: &AppHandle,
+    window: &WebviewWindow,
+    target: WindowBounds,
+) -> tauri::Result<AnimationOutcome> {
+    wait_for_surface_ready().await;
+    set_window_bounds(window, target)?;
+    restore_transparent_background(app, window);
+    Ok(AnimationOutcome::Completed)
+}
 
 fn is_latest_move(move_generation: u64, current_generation: u64) -> bool {
     move_generation == current_generation
@@ -118,46 +153,6 @@ impl SurfaceGeometry {
         }
     }
 }
-/// 跨平台的矩形（Linux 上无 Windows RECT；Windows 动画循环里转 RECT）。
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct RegionRect {
-    left: i32,
-    top: i32,
-    right: i32,
-    bottom: i32,
-}
-
-struct ExpandGeometry {
-    /// 窗口起始位置：最终窗口中心对齐当前窗口中心
-    anchor_position: PhysicalPosition<i32>,
-    /// 初始可见矩形（窗口内坐标），以窗口中心为中心、等于当前窗口尺寸
-    initial_region: RegionRect,
-    /// 最终可见矩形 = 整个窗口客户区
-    full_region: RegionRect,
-}
-
-fn expand_geometry(current: WindowBounds, target: WindowBounds) -> ExpandGeometry {
-    let anchor_position = PhysicalPosition::new(
-        current.position.x + current.size.width as i32 / 2 - target.size.width as i32 / 2,
-        current.position.y + current.size.height as i32 / 2 - target.size.height as i32 / 2,
-    );
-    let left = ((target.size.width as f64 - current.size.width as f64) / 2.0).round() as i32;
-    let top = ((target.size.height as f64 - current.size.height as f64) / 2.0).round() as i32;
-    let initial_region = RegionRect {
-        left,
-        top,
-        right: left + current.size.width as i32,
-        bottom: top + current.size.height as i32,
-    };
-    let full_region = RegionRect {
-        left: 0,
-        top: 0,
-        right: target.size.width as i32,
-        bottom: target.size.height as i32,
-    };
-    ExpandGeometry { anchor_position, initial_region, full_region }
-}
-
 fn surface_geometry(window: &WebviewWindow) -> tauri::Result<SurfaceGeometry> {
     let monitor = window
         .current_monitor()?
@@ -182,17 +177,6 @@ fn logical_size(
     ))
 }
 
-fn interpolate_i32(start: i32, end: i32, progress: f64) -> i32 {
-    start + ((end - start) as f64 * progress).round() as i32
-}
-
-fn interpolate_u32(start: u32, end: u32, progress: f64) -> u32 {
-    (start as f64 + (end as f64 - start as f64) * progress).round() as u32
-}
-
-fn ease_out_cubic(progress: f64) -> f64 {
-    1.0 - (1.0 - progress).powi(3)
-}
 
 fn set_window_bounds(window: &WebviewWindow, bounds: WindowBounds) -> tauri::Result<()> {
     #[cfg(windows)]
@@ -237,29 +221,8 @@ impl AnimationOutcome {
 
 
 
-fn animation_outcome(generation: u64, current_generation: u64) -> AnimationOutcome {
-    if generation == current_generation {
-        AnimationOutcome::Completed
-    } else {
-        AnimationOutcome::Cancelled
-    }
-}
-
 fn cancel_window_animation() {
     ANIMATION_GENERATION.fetch_add(1, Ordering::SeqCst);
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum TransitionPlan {
-    Direct([WindowBounds; 1]),
-    Interpolated,
-}
-
-fn transition_plan(reduced_motion: bool, target: WindowBounds) -> TransitionPlan {
-    if reduced_motion {
-        TransitionPlan::Direct([target])
-    } else {
-        TransitionPlan::Interpolated
-    }
 }
 
 
@@ -368,215 +331,6 @@ fn restore_transparent_background(app: &AppHandle, window: &WebviewWindow) {
     });
 }
 
-async fn animate_window_bounds(
-    app: &AppHandle,
-    window: &WebviewWindow,
-    start: WindowBounds,
-    target: WindowBounds,
-    duration: Duration,
-    reduced_motion: bool,
-) -> tauri::Result<AnimationOutcome> {
-
-    if let TransitionPlan::Direct([exact_target]) = transition_plan(reduced_motion, target) {
-        set_window_bounds(window, exact_target)?;
-        restore_transparent_background(app, window);
-        return Ok(AnimationOutcome::Completed);
-    }
-    let generation = ANIMATION_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
-
-    #[cfg(windows)]
-    {
-        let hwnd = window.hwnd()?.0 as isize;
-        // 动画完成后重设 WebView2 透明背景（缩小/微调路径同样会表面重建）
-        let app = app.clone();
-        let webview = window.clone();
-        return tauri::async_runtime::spawn_blocking(move || {
-            let started = Instant::now();
-            loop {
-                if ANIMATION_GENERATION.load(Ordering::SeqCst) != generation {
-                    return Ok(AnimationOutcome::Cancelled);
-                }
-                let elapsed = started.elapsed().as_secs_f64();
-                let raw = (elapsed / duration.as_secs_f64()).min(1.0);
-                let p = ease_out_cubic(raw);
-                let x = interpolate_i32(start.position.x, target.position.x, p);
-                let y = interpolate_i32(start.position.y, target.position.y, p);
-                let w = interpolate_u32(start.size.width, target.size.width, p) as i32;
-                let h = interpolate_u32(start.size.height, target.size.height, p) as i32;
-                let r = unsafe { SetWindowPos(hwnd as _, std::ptr::null_mut(), x, y, w, h, SWP_NOACTIVATE | SWP_NOZORDER | SWP_ASYNCWINDOWPOS) };
-                if r == 0 { return Err(tauri::Error::Io(std::io::Error::last_os_error())); }
-                if raw >= 1.0 {
-                    // 收尾：同步 SetWindowPos（不带 SWP_ASYNCWINDOWPOS），阻塞等待 UI 线程
-                    // 处理完动画期间积压的 WM_SIZE 消息，使 WebView2 子窗口 bounds 与父窗口
-                    // 最终尺寸对齐；SWP_NOCOPYBITS 丢弃客户区位图复制，新扩展区域立即重绘。
-                    let r = unsafe {
-                        SetWindowPos(
-                            hwnd as _,
-                            std::ptr::null_mut(),
-                            target.position.x,
-                            target.position.y,
-                            target.size.width as i32,
-                            target.size.height as i32,
-                            SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOCOPYBITS,
-                        )
-                    };
-                    if r == 0 {
-                        return Err(tauri::Error::Io(std::io::Error::last_os_error()));
-                    }
-                    // 重设 WebView2 透明背景：resize（表面重建）后 DefaultBackgroundColor 会重置
-                    // 为默认白色，导致圆角外透明区域短暂显示白色尖角。
-                    let _ = app.run_on_main_thread(move || {
-                        let _ = webview
-                            .as_ref()
-                            .set_background_color(Some(tauri::window::Color(0, 0, 0, 0)));
-                    });
-                    return Ok(AnimationOutcome::Completed);
-                }
-                std::thread::sleep(Duration::from_millis(4));
-            }
-        })
-        .await
-        .map_err(|e| tauri::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?
-    }
-
-    #[cfg(not(windows))]
-    {
-        let started = Instant::now();
-        loop {
-            let outcome = animation_outcome(generation, ANIMATION_GENERATION.load(Ordering::SeqCst));
-            if !outcome.should_finish_transition() { return Ok(outcome); }
-            let raw = (started.elapsed().as_secs_f64() / duration.as_secs_f64()).min(1.0);
-            let p = ease_out_cubic(raw);
-            set_window_bounds(window, WindowBounds {
-                position: PhysicalPosition::new(interpolate_i32(start.position.x, target.position.x, p), interpolate_i32(start.position.y, target.position.y, p)),
-                size: PhysicalSize::new(interpolate_u32(start.size.width, target.size.width, p), interpolate_u32(start.size.height, target.size.height, p)),
-            })?;
-            if raw >= 1.0 { return Ok(AnimationOutcome::Completed); }
-            tokio::time::sleep(FRAME_DURATION).await;
-        }
-    }
-}
-
-/// 放大路径动画：窗口立即设为最终尺寸（WebView2 视口一次 resize、内容整体栅格化一次），
-/// 动画期间用 SetWindowRgn 逐步扩张可见矩形，位置从当前中心锚点平移到目标位置。
-/// 避免逐帧 resize 视口导致的 Chromium tile 逐块补渲染。
-async fn animate_expand_with_region(
-    app: &AppHandle,
-    window: &WebviewWindow,
-    current: WindowBounds,
-    target: WindowBounds,
-    duration: Duration,
-    reduced_motion: bool,
-) -> tauri::Result<AnimationOutcome> {
-    if let TransitionPlan::Direct([exact_target]) = transition_plan(reduced_motion, target) {
-        set_window_bounds(window, exact_target)?;
-        return Ok(AnimationOutcome::Completed);
-    }
-
-    let ExpandGeometry {
-        anchor_position,
-        initial_region,
-        full_region,
-    } = expand_geometry(current, target);
-    let generation = ANIMATION_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
-
-    #[cfg(windows)]
-    {
-        let hwnd = window.hwnd()?.0 as isize;
-        // resize 后重设 WebView2 默认背景透明：WebView2 在窗口 resize（表面重建）后
-        // DefaultBackgroundColor 会重置为默认白色，导致圆角外透明区域短暂显示白色尖角。
-        let app = app.clone();
-        let webview = window.clone();
-        return tauri::async_runtime::spawn_blocking(move || {
-            // 同步设最终尺寸与锚点位置：等待 WM_SIZE 处理完，WebView2 视口一次 resize。
-            if unsafe {
-                SetWindowPos(
-                    hwnd as _,
-                    std::ptr::null_mut(),
-                    anchor_position.x,
-                    anchor_position.y,
-                    target.size.width as i32,
-                    target.size.height as i32,
-                    SWP_NOACTIVATE | SWP_NOZORDER,
-                )
-            } == 0
-            {
-                return Err(tauri::Error::Io(std::io::Error::last_os_error()));
-            }
-            restore_transparent_background(&app, &webview);
-
-            let mut has_region = false;
-            let initial_hrgn = unsafe {
-                CreateRectRgn(
-                    initial_region.left,
-                    initial_region.top,
-                    initial_region.right,
-                    initial_region.bottom,
-                )
-            };
-            if initial_hrgn != std::ptr::null_mut() && unsafe { SetWindowRgn(hwnd as _, initial_hrgn, 1) } != 0 {
-                has_region = true;
-            }
-
-            let started = Instant::now();
-            loop {
-                if ANIMATION_GENERATION.load(Ordering::SeqCst) != generation {
-                    if has_region {
-                        unsafe { SetWindowRgn(hwnd as _, std::ptr::null_mut(), 1) };
-                    }
-                    return Ok(AnimationOutcome::Cancelled);
-                }
-                let elapsed = started.elapsed().as_secs_f64();
-                let raw = (elapsed / duration.as_secs_f64()).min(1.0);
-                let p = ease_out_cubic(raw);
-                let x = interpolate_i32(anchor_position.x, target.position.x, p);
-                let y = interpolate_i32(anchor_position.y, target.position.y, p);
-                let region = RECT {
-                    left: interpolate_i32(initial_region.left, 0, p),
-                    top: interpolate_i32(initial_region.top, 0, p),
-                    right: interpolate_i32(initial_region.right, full_region.right, p),
-                    bottom: interpolate_i32(initial_region.bottom, full_region.bottom, p),
-                };
-                if unsafe {
-                    SetWindowPos(
-                        hwnd as _,
-                        std::ptr::null_mut(),
-                        x,
-                        y,
-                        0,
-                        0,
-                        SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER | SWP_ASYNCWINDOWPOS,
-                    )
-                } == 0
-                {
-                    if has_region {
-                        unsafe { SetWindowRgn(hwnd as _, std::ptr::null_mut(), 1) };
-                    }
-                    return Err(tauri::Error::Io(std::io::Error::last_os_error()));
-                }
-                let hrgn =
-                    unsafe { CreateRectRgn(region.left, region.top, region.right, region.bottom) };
-                if hrgn != std::ptr::null_mut() && unsafe { SetWindowRgn(hwnd as _, hrgn, 1) } != 0 {
-                    has_region = true;
-                }
-                if raw >= 1.0 {
-                    if has_region {
-                        unsafe { SetWindowRgn(hwnd as _, std::ptr::null_mut(), 1) };
-                    }
-                    return Ok(AnimationOutcome::Completed);
-                }
-                std::thread::sleep(Duration::from_millis(4));
-            }
-        })
-        .await
-        .map_err(|e| tauri::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?
-    }
-
-    #[cfg(not(windows))]
-    {
-        animate_window_bounds(app, window, current, target, duration, reduced_motion).await
-    }
-}
 
 pub async fn start_floating_drag(app: &AppHandle) -> Result<(), String> {
     let Some(window) = app.get_webview_window(FLOATING_LABEL) else {
@@ -659,15 +413,11 @@ pub async fn resize_response_panel(
     };
     let current = current_bounds(&window)?;
     let target = surface_geometry(&window)?.response_bounds(content_height);
-    let from_waiting = current_window_mode() == WindowMode::Waiting;
-    let outcome = if from_waiting {
-        animate_expand_with_region(app, &window, current, target, EXPAND_DURATION, reduced_motion).await?
-    } else {
-        animate_window_bounds(app, &window, current, target, EXPAND_DURATION, reduced_motion).await?
-    };
-    if let Some(mode) = completed_mode(WindowMode::Response, outcome) {
-        set_window_mode(mode);
-    }
+    // 无窗口动画：直接设目标尺寸（fade 由前端完成）。流式时前端持续渲染中，
+    // 不等就绪（避免延迟），直接 resize 视口一次到位。
+    set_window_bounds(&window, target)?;
+    restore_transparent_background(app, &window);
+    set_window_mode(WindowMode::Response);
     Ok(())
 }
 pub async fn show_response_panel(
@@ -718,18 +468,9 @@ async fn show_bottom_anchored(
     };
     apply_always_on_top(app, &window);
     window.set_resizable(false)?;
-    if !from_settings {
-        window.emit("surface://changed", "chat")?;
-        window.show()?;
-    }
-    // 设置页→输入条：宽度 460→640 属放大方向，逐帧 resize 会让右半区域 tile 逐块补渲染。
-    // 与放大路径一致用 region 动画（视口一次到位 + region 扩张），emit 仍推迟到动画后。
-    let outcome = animate_expand_with_region(app, &window, current, target, EXPAND_DURATION, reduced_motion).await?;
+    // 动画前切换前端到目标 surface：动画展示的是目标 UI 本身，而非旧 surface 的裁切。
+    let outcome = set_bounds_after_ready(app, &window, target).await?;
     if outcome.should_finish_transition() {
-        if from_settings {
-            window.emit("surface://changed", "chat")?;
-            window.show()?;
-        }
         window.set_focus()?;
     }
     Ok(outcome)
@@ -761,13 +502,14 @@ pub async fn show_floating_ball(app: &AppHandle, reduced_motion: bool) -> tauri:
         size,
     };
     window.set_resizable(false)?;
-    let outcome = animate_window_bounds(app, &window, current, target, COLLAPSE_DURATION, reduced_motion).await?;
-    if !outcome.should_finish_transition() {
-        return Ok(());
-    }
+    // 切换前端到悬浮球，等渲染完成再直接设尺寸（无窗口动画——fade 由前端完成）
     window.emit("surface://changed", "floating")?;
     apply_always_on_top(app, &window);
     window.show()?;
+    let outcome = set_bounds_after_ready(app, &window, target).await?;
+    if !outcome.should_finish_transition() {
+        return Ok(());
+    }
     window.set_focus()?;
     set_window_mode(WindowMode::Floating);
     Ok(())
@@ -785,7 +527,8 @@ pub async fn show_settings_panel(app: &AppHandle, reduced_motion: bool) -> tauri
     window.set_resizable(false)?;
     window.emit("surface://changed", "settings")?;
     window.show()?;
-    let outcome = animate_expand_with_region(app, &window, current, target, EXPAND_DURATION, reduced_motion).await?;
+    // 等前端渲染（设置页懒加载 Suspense）再直接设尺寸（无窗口动画——fade 由前端完成）
+    let outcome = set_bounds_after_ready(app, &window, target).await?;
     if outcome.should_finish_transition() {
         window.set_focus()?;
         set_window_mode(WindowMode::Settings);
@@ -939,18 +682,6 @@ pub fn attach_floating_position_persistence(app: &AppHandle) {
 mod tests {
     use super::*;
 
-    #[test]
-    fn reduced_motion_commits_the_exact_target_once() {
-        let target = WindowBounds {
-            position: PhysicalPosition::new(120, 340),
-            size: PhysicalSize::new(640, 280),
-        };
-        assert_eq!(transition_plan(true, target), TransitionPlan::Direct([target]));
-        let TransitionPlan::Direct(commits) = transition_plan(true, target) else { unreachable!() };
-        assert_eq!(commits, [target]);
-        assert_eq!(commits.len(), 1);
-        assert_eq!(transition_plan(false, target), TransitionPlan::Interpolated);
-    }
 
     #[test]
     fn toggle_treats_waiting_and_every_visible_surface_as_expanded() {
@@ -994,30 +725,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn easing_starts_and_finishes_at_bounds() {
-        assert_eq!(ease_out_cubic(0.0), 0.0);
-        assert_eq!(ease_out_cubic(1.0), 1.0);
-        assert!(ease_out_cubic(0.5) > 0.5);
-    }
-
-    #[test]
-    fn animation_frame_budget_supports_high_refresh_displays() {
-        assert!(FRAME_DURATION <= Duration::from_millis(9));
-    }
-
-    #[test]
-    fn interpolation_reaches_target() {
-        assert_eq!(interpolate_i32(10, 100, 1.0), 100);
-        assert_eq!(interpolate_u32(50, 480, 1.0), 480);
-    }
-    #[test]
-    fn bottom_anchored_cancelled_animation_skips_completion_side_effects() {
-        assert_eq!(animation_outcome(7, 8), AnimationOutcome::Cancelled);
-        assert_eq!(animation_outcome(8, 8), AnimationOutcome::Completed);
-        assert!(!animation_outcome(7, 8).should_finish_transition());
-        assert!(animation_outcome(8, 8).should_finish_transition());
-    }
 
     fn geometry(scale_factor: f64) -> SurfaceGeometry {
         SurfaceGeometry {
@@ -1088,15 +795,6 @@ mod tests {
         assert_eq!(bounds.position.x, -900);
         assert_eq!(bounds.size.width, 600);
     }
-    #[test]
-    fn settings_transition_animates_unless_reduced_motion_is_requested() {
-        let target = WindowBounds {
-            position: PhysicalPosition::new(120, 80),
-            size: PhysicalSize::new(460, 560),
-        };
-        assert_eq!(transition_plan(false, target), TransitionPlan::Interpolated);
-        assert_eq!(transition_plan(true, target), TransitionPlan::Direct([target]));
-    }
 
     #[test]
     fn settings_bounds_clamp_bottom_and_right_edges() {
@@ -1123,53 +821,5 @@ mod tests {
         let bounds = geometry.settings_bounds(current);
         assert_eq!(bounds.position, PhysicalPosition::new(-1920, 120));
         assert_eq!(bounds.size, PhysicalSize::new(690, 840));
-    }
-    #[test]
-    fn expand_geometry_keeps_final_center_on_current_center() {
-        let current = WindowBounds {
-            position: PhysicalPosition::new(400, 300),
-            size: PhysicalSize::new(50, 50),
-        };
-        let target = WindowBounds {
-            position: PhysicalPosition::new(105, 296),
-            size: PhysicalSize::new(640, 58),
-        };
-        let geometry = expand_geometry(current, target);
-        assert_eq!(geometry.anchor_position, PhysicalPosition::new(105, 296));
-        let initial = geometry.initial_region;
-        assert_eq!((initial.left, initial.top, initial.right, initial.bottom), (295, 4, 345, 54));
-        let full = geometry.full_region;
-        assert_eq!((full.left, full.top, full.right, full.bottom), (0, 0, 640, 58));
-    }
-
-    #[test]
-    fn expand_geometry_region_may_overflow_when_a_dimension_shrinks() {
-        let current = WindowBounds {
-            position: PhysicalPosition::new(100, 950),
-            size: PhysicalSize::new(640, 58),
-        };
-        let target = WindowBounds {
-            position: PhysicalPosition::new(150, 490),
-            size: PhysicalSize::new(460, 560),
-        };
-        let geometry = expand_geometry(current, target);
-        assert_eq!(geometry.anchor_position, PhysicalPosition::new(190, 699));
-        let initial = geometry.initial_region;
-        assert_eq!((initial.left, initial.top, initial.right, initial.bottom), (-90, 251, 550, 309));
-    }
-
-    #[test]
-    fn expand_geometry_centers_odd_dimensions() {
-        let current = WindowBounds {
-            position: PhysicalPosition::new(400, 300),
-            size: PhysicalSize::new(50, 50),
-        };
-        let target = WindowBounds {
-            position: PhysicalPosition::new(388, 288),
-            size: PhysicalSize::new(75, 75),
-        };
-        let geometry = expand_geometry(current, target);
-        let initial = geometry.initial_region;
-        assert_eq!((initial.left, initial.top, initial.right, initial.bottom), (13, 13, 63, 63));
     }
 }

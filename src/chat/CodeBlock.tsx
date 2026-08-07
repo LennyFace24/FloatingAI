@@ -68,6 +68,11 @@ interface CodeBlockProps {
   code: string;
 }
 
+/** 高亮结果缓存（模块级，跨挂载复用）：react-syntax-highlighter 每次挂载都重新
+ * 分词高亮（长代码块可达数十 ms），缓存后切回聊天零重高亮。上限 100 条。 */
+const highlightCache = new Map<string, React.ReactElement>();
+const HIGHLIGHT_CACHE_LIMIT = 100;
+
 export function CodeBlock({ language = 'text', code }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const resetTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -86,6 +91,26 @@ export function CodeBlock({ language = 'text', code }: CodeBlockProps) {
     }
   }
 
+  const key = `${normalizedLanguage}\u0000${code}`;
+  let highlighted = highlightCache.get(key);
+  if (!highlighted) {
+    highlighted = (
+      <SyntaxHighlighter
+        language={normalizedLanguage}
+        style={GRAPHITE_STYLE}
+        customStyle={{ margin: 0, padding: '12px', background: 'transparent', fontSize: '12px' }}
+        codeTagProps={{ style: { fontFamily: 'var(--font-mono)', lineHeight: 1.65 } }}
+      >
+        {code}
+      </SyntaxHighlighter>
+    );
+    if (highlightCache.size >= HIGHLIGHT_CACHE_LIMIT) {
+      const first = highlightCache.keys().next().value;
+      if (first !== undefined) highlightCache.delete(first);
+    }
+    highlightCache.set(key, highlighted);
+  }
+
   return (
     <div className="code-block">
       <div className="code-block-header">
@@ -99,14 +124,7 @@ export function CodeBlock({ language = 'text', code }: CodeBlockProps) {
           {copied ? <Check size={14} /> : <Copy size={14} />}
         </IconButton>
       </div>
-      <SyntaxHighlighter
-        language={normalizedLanguage}
-        style={GRAPHITE_STYLE}
-        customStyle={{ margin: 0, padding: '12px', background: 'transparent', fontSize: '12px' }}
-        codeTagProps={{ style: { fontFamily: 'var(--font-mono)', lineHeight: 1.65 } }}
-      >
-        {code}
-      </SyntaxHighlighter>
+      {highlighted}
     </div>
   );
 }

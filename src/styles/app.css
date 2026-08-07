@@ -18,6 +18,21 @@
 
 * { box-sizing: border-box; }
 
+/* surface 常驻叠放 + fade 切换：旧页面淡入背景、新页面淡出背景 */
+.surface-layer {
+  position: fixed;
+  inset: 0;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.6s ease, visibility 0.6s;
+}
+.surface-hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
 body {
   margin: 0;
   background: transparent;
@@ -38,6 +53,9 @@ textarea { font: inherit; }
 button { color: inherit; }
 
 .floating-ball {
+  position: fixed;
+  top: 0;
+  left: 0;
   border: 1px solid #353535;
   border-radius: 50%;
   color: var(--text-primary);
@@ -74,18 +92,16 @@ button { color: inherit; }
   overflow: hidden;
 }
 
-.chat-panel,
-.assistant-response { display: grid; grid-template-rows: 48px minmax(0, 1fr) auto; }
-.settings-panel { display: grid; grid-template-rows: 48px 1fr; }
+
 
 .assistant-prompt {
-  width: 640px;
+  width: min(640px, 100vw);
   height: 58px;
   display: block;
   border-radius: 14px;
 }
 .assistant-prompt .panel-header { display: none; }
-.assistant-prompt .composer-area { height: 58px; padding: 0; border: 0; }
+.assistant-prompt .composer-area { min-height: 58px; padding: 0; border: 0; }
 .assistant-prompt .composer { height: 58px; min-height: 58px; border-radius: 14px; }
 
 .assistant-waiting {
@@ -109,12 +125,11 @@ button { color: inherit; }
   width: 22px;
   height: 22px;
   border: 2px solid #3d3d3d;
-  border-top-color: #b8b8b8;
   border-radius: 50%;
-  animation: waiting-spin 800ms linear infinite;
+  /* 取消加载转圈动画：发送后保持静态指示，停止按钮仍可点 */
 }
 
-.assistant-response { overflow: hidden; }
+.assistant-response { display: grid; grid-template-rows: 48px minmax(0, 1fr) auto; overflow: hidden; }
 
 .panel-header {
   min-height: 48px;
@@ -176,11 +191,14 @@ button { color: inherit; }
   padding: 16px;
   scrollbar-width: thin;
   scrollbar-color: #333 transparent;
+  /* 布局隔离：消息区内部变化不触发外层回流 */
+  contain: layout paint;
 }
 .message-content {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  contain: layout paint;
 }
 
 .empty-state {
@@ -199,7 +217,14 @@ button { color: inherit; }
   line-height: 1.65;
   overflow-wrap: anywhere;
 }
-.message > p { margin: 0; white-space: pre-wrap; }
+.message-image {
+  display: block;
+  max-width: 180px;
+  max-height: 120px;
+  margin-bottom: 6px;
+  border: 1px solid #333;
+  border-radius: 8px;
+}
 .message-user {
   align-self: flex-end;
   border: 1px solid rgb(255 255 255 / 14%);
@@ -335,19 +360,20 @@ button { color: inherit; }
 .model-picker-dropdown li button:hover { background: #1e1e1e; }
 .model-picker-empty { margin: 0; padding: 8px; font-size: 11px; color: var(--text-muted); }
 .model-picker-current { margin: 4px 0 0; padding: 6px 8px 2px; font-size: 11px; color: var(--text-muted); border-top: 1px solid #2a2a2a; }
-
 .image-preview {
   position: relative;
   flex: 0 0 auto;
-  margin: 6px 10px 0;
-  max-width: 120px;
+  align-self: flex-end;
+  order: -1;
+  margin: 0 8px 4px 0;
+  max-width: 88px;
 }
 .image-preview img {
   display: block;
-  max-width: 120px;
-  max-height: 72px;
+  max-width: 88px;
+  max-height: 36px;
   border: 1px solid #333;
-  border-radius: 8px;
+  border-radius: 6px;
   background: #000;
 }
 .image-preview-remove {
@@ -364,6 +390,7 @@ button { color: inherit; }
   color: var(--text-primary);
   font-size: 13px;
   cursor: pointer;
+  z-index: 1;
 }
 
 .settings-update-row {

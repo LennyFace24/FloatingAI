@@ -1,13 +1,9 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { commands, type AppSettings, type MultimodalContentPart } from './bridge/commands';
+import { commands, type AppSettings } from './bridge/commands';
 import { events } from './bridge/events';
 import { AssistantPanel } from './chat/AssistantPanel';
-import { deriveAssistantPhase, type AssistantPhase } from './chat/assistantSurface';
-import {
-  buildProviderMessages,
-  conversationReducer,
-  initialConversationState,
-} from './chat/conversation';
+import { useChatSession } from './chat/useChatSession';
+import type { AssistantPhase } from './chat/assistantSurface';
 import { prefersReducedMotion, RESPONSE_MIN_HEIGHT } from './app/motion';
 import { FloatingBall } from './floating/FloatingBall';
 import { defaultSettingsForm, type SettingsFormInput } from './settings/settings';
@@ -20,7 +16,7 @@ const SettingsPanel = lazy(() =>
 
 type MainSurface = 'floating' | 'chat' | 'settings';
 
-function settingsFormFromPublic(settings: AppSettings) {
+function settingsFormFromPublic(settings: AppSettings): SettingsFormInput {
   return {
     apiKey: settings.apiKey ?? '',
     baseUrl: settings.baseUrl,
@@ -33,15 +29,15 @@ function settingsFormFromPublic(settings: AppSettings) {
     sttApiKey: settings.sttApiKey ?? '',
     sttLanguage: settings.sttLanguage,
     sttProvider: settings.sttProvider,
-  } satisfies SettingsFormInput;
+  };
 }
 
 export default function App() {
   const [surface, setSurface] = useState<MainSurface>('floating');
   const [settingsForm, setSettingsForm] = useState<SettingsFormInput>(defaultSettingsForm);
-  const conversationRef = useRef(initialConversationState);
-  const [conversation, setConversation] = useState(initialConversationState);
-  const assistantPhase = deriveAssistantPhase(conversation);
+  const settingsFormRef = useRef(settingsForm);
+  settingsFormRef.current = settingsForm;
+  const surfaceRef = useRef<MainSurface>('floating');
 
   async function syncNativePhase(phase: AssistantPhase) {
     const reducedMotion = prefersReducedMotion();
@@ -50,68 +46,61 @@ export default function App() {
     else await commands.showResponsePanel(RESPONSE_MIN_HEIGHT, reducedMotion);
   }
 
-  function dispatchConversation(action: Parameters<typeof conversationReducer>[1]) {
-    const next = conversationReducer(conversationRef.current, action);
-    conversationRef.current = next;
-    setConversation(next);
-    return next;
-  }
+  // 聊天会话状态（conversation + 事件 + 发送/停止）
+  const { conversation, assistantPhase, sendMessage, stopMessage, clear } = useChatSession({
+    model: settingsForm.model,
+    onShowPhase: syncNativePhase,
+  });
+  const assistantPhaseRef = useRef(assistantPhase);
+  assistantPhaseRef.current = assistantPhase;
+  // surface 切换后通知 Rust 渲染完成。双 rAF 确保当前帧提交到 WebView2；
+  // 再等一次 requestIdleCallback（主线程任务排空）——重历史（KaTeX/图片/大 DOM）
+  // 的渲染跨多帧，空闲回调表示渲染稳定，Rust 此时才启动动画，避免「渲染一半」。
+  useEffect(() => {
+    let frame1 = 0;
+    let frame2 = 0;
+    let idle: number | undefined;
+    const notify = () => void commands.surfaceReady().catch(() => undefined);
+    frame1 = requestAnimationFrame(() => {
+      frame2 = requestAnimationFrame(() => {
+        if (typeof requestIdleCallback === 'function') {
+          idle = requestIdleCallback(notify, { timeout: 1000 });
+        } else {
+          notify();
+        }
+      });
+    });
+    return () => {
+      cancelAnimationFrame(frame1);
+      cancelAnimationFrame(frame2);
+      if (idle !== undefined && typeof cancelIdleCallback === 'function') cancelIdleCallback(idle);
+    };
+  }, [surface]);
 
+  // surface 事件监听（交叉淡化触发）
   useEffect(() => {
     const unlisten = Promise.all([
-      events.onSurfaceChanged(setSurface),
+      events.onSurfaceChanged((next) => {
+        surfaceRef.current = next;
+        setSurface(next);
+      }),
       events.onSurfaceShowRequested(() => {
-        void showAssistantPhase(deriveAssistantPhase(conversationRef.current));
-      }),
-      events.onChatDelta((payload) => {
-        dispatchConversation({ type: 'delta', ...payload });
-      }),
-      events.onChatDone((payload) => {
-        if (conversationRef.current.activeRequestId !== payload.requestId) return;
-        const next = dispatchConversation({ type: 'done', ...payload });
-        if (deriveAssistantPhase(next) === 'prompt') void syncNativePhase('prompt');
-      }),
-      events.onChatError((payload) => {
-        if (conversationRef.current.activeRequestId !== payload.requestId) return;
-        dispatchConversation({ type: 'error', requestId: payload.requestId, message: payload.message });
+        // 用 ref 读最新 phase（事件回调闭包捕获的 assistantPhase 是挂载时的旧值）
+        void showAssistantPhase(assistantPhaseRef.current);
       }),
     ]);
     return () => {
       void unlisten.then((listeners) => listeners.forEach((listener) => listener()));
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function showAssistantPhase(phase: AssistantPhase) {
-    await syncNativePhase(phase);
+    // 先切 surface 再调 Rust 命令：Rust 动画会等 surface_ready，
+    // 而 surfaceReady effect 依赖 surface 变化触发——若等命令返回才 setSurface，
+    // 命令与 surfaceReady 互相等待（死锁）。先设 surface，命令返回后无需再设。
     setSurface('chat');
-  }
-
-  async function sendMessage(content: string | MultimodalContentPart[]) {
-    const requestId = crypto.randomUUID();
-    const providerMessages = [
-      ...buildProviderMessages(conversationRef.current.messages),
-      { role: 'user' as const, content },
-    ];
-
-    dispatchConversation({ type: 'send', requestId, content: typeof content === 'string' ? content : '[图片]' });
-    try {
-      await syncNativePhase('waiting');
-      await commands.startChat(requestId, providerMessages);
-    } catch (error) {
-      dispatchConversation({
-        type: 'error',
-        requestId,
-        message: error instanceof Error ? error.message : String(error),
-      });
-    }
-    return requestId;
-  }
-
-  async function stopMessage(requestId: string) {
-    await commands.stopChat(requestId);
-    if (conversationRef.current.activeRequestId !== requestId) return;
-    const next = dispatchConversation({ type: 'stopped', requestId });
-    if (deriveAssistantPhase(next) === 'prompt') await syncNativePhase('prompt');
+    await syncNativePhase(phase);
   }
 
   async function openSettings() {
@@ -122,55 +111,70 @@ export default function App() {
   }
 
   async function returnToAssistant() {
-    await showAssistantPhase(deriveAssistantPhase(conversationRef.current));
+    await showAssistantPhase(assistantPhase);
   }
 
-  if (surface === 'settings') {
-    return (
-      <Suspense fallback={<div className="settings-loading" role="status">加载设置…</div>}>
-        <SettingsPanel
-          initialSettings={settingsForm}
-          onSave={async (settings) => {
-            await commands.saveSettings(settings);
-            await returnToAssistant();
-          }}
-          onClose={returnToAssistant}
-        />
-      </Suspense>
-    );
-  }
-
-  if (surface === 'chat') {
-    return (
-      <AssistantPanel
-        conversation={conversation}
-        onSend={sendMessage}
-        onStop={stopMessage}
-        onClear={() => {
-          dispatchConversation({ type: 'clear' });
-          void syncNativePhase('prompt');
-        }}
-        onCollapse={() => {
-          void commands.showFloatingBall(prefersReducedMotion())
-            .then(() => setSurface('floating'))
-            .catch((error) => console.error('收起对话面板失败', error));
-        }}
-        onOpenSettings={() => {
-          void openSettings().catch((error) => console.error('打开设置失败', error));
-        }}
-        onContentHeight={(height) => {
-          void commands.resizeResponsePanel(height, prefersReducedMotion());
-        }}
-      />
-    );
-  }
-
+  // 三 surface 常驻 DOM 叠放，fade（opacity 过渡）切换：
+  // 旧页面淡入背景、新页面淡出背景；页面不卸载——无重新渲染，
+  // 也根治「切回聊天渲染一半」问题。
   return (
-    <FloatingBall
-      isBusy={conversation.status === 'streaming'}
-      onActivate={() => {
-        void showAssistantPhase(assistantPhase).catch((error) => console.error('打开助手表面失败', error));
-      }}
-    />
+    <>
+      <div
+        className={`surface-layer ${surface !== 'floating' ? 'surface-hidden' : ''}`}
+        data-surface="floating"
+        aria-hidden={surface !== 'floating'}
+      >
+        <FloatingBall
+          isBusy={conversation.status === 'streaming'}
+          onActivate={() => {
+            void showAssistantPhase(assistantPhase).catch((error) => console.error('打开助手表面失败', error));
+          }}
+        />
+      </div>
+
+      <div
+        className={`surface-layer ${surface !== 'settings' ? 'surface-hidden' : ''}`}
+        data-surface="settings"
+        aria-hidden={surface !== 'settings'}
+      >
+        <Suspense fallback={<div className="settings-loading" role="status">加载设置…</div>}>
+          <SettingsPanel
+            initialSettings={settingsForm}
+            onSave={async (settings) => {
+              await commands.saveSettings(settings);
+              await returnToAssistant();
+            }}
+            onClose={returnToAssistant}
+          />
+        </Suspense>
+      </div>
+
+      <div
+        className={`surface-layer ${surface !== 'chat' ? 'surface-hidden' : ''}`}
+        data-surface="chat"
+        aria-hidden={surface !== 'chat'}
+      >
+        <AssistantPanel
+          conversation={conversation}
+          onSend={sendMessage}
+          onStop={stopMessage}
+          onClear={() => {
+            clear();
+            void syncNativePhase('prompt');
+          }}
+          onCollapse={() => {
+            void commands.showFloatingBall(prefersReducedMotion())
+              .then(() => setSurface('floating'))
+              .catch((error) => console.error('收起对话面板失败', error));
+          }}
+          onOpenSettings={() => {
+            void openSettings().catch((error) => console.error('打开设置失败', error));
+          }}
+          onContentHeight={(height) => {
+            void commands.resizeResponsePanel(height, prefersReducedMotion());
+          }}
+        />
+      </div>
+    </>
   );
 }
