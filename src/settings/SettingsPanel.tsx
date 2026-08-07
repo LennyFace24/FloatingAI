@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { commands } from '../bridge/commands';
 import { normalizeSettingsForm, type SettingsFormInput, validateSettingsForm } from './settings';
 import { IconButton } from '../ui/IconButton';
@@ -124,6 +124,10 @@ function ModelPicker({ scope, currentValue, onSelect, onSaveSettings }: ModelPic
 export function SettingsPanel({ initialSettings, onSave, onClose }: SettingsPanelProps) {
   const [view, setView] = useState<SettingsView>('root');
   const [form, setForm] = useState(initialSettings);
+  // surface 常驻 DOM：组件不卸载，initialSettings 变化时同步表单（否则显示旧值）
+  useEffect(() => {
+    setForm(initialSettings);
+  }, [initialSettings]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saveError, setSaveError] = useState('');
   const [saving, setSaving] = useState(false);

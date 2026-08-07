@@ -18,6 +18,22 @@
 
 * { box-sizing: border-box; }
 
+/* surface 常驻叠放 + fade 切换：旧页面淡入背景、新页面淡出背景 */
+.surface-layer {
+  position: fixed;
+  inset: 0;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.38s ease, visibility 0.38s;
+  z-index: 1;
+}
+.surface-hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
 body {
   margin: 0;
   background: transparent;
@@ -77,28 +93,7 @@ button { color: inherit; }
   overflow: hidden;
 }
 
-/* 设置页→输入条交叉淡化：设置页淡出层 + 输入条淡入层 */
-.settings-fade-out {
-  position: fixed;
-  inset: 0;
-  z-index: 5;
-  pointer-events: none;
-  background: #080808;
-  animation: surface-fade-out 0.38s ease-out forwards;
-}
-.prompt-fade-in {
-  position: relative;
-  z-index: 6;
-  animation: surface-fade-in 0.3s ease-out both;
-}
-@keyframes surface-fade-out {
-  from { opacity: 1; }
-  to { opacity: 0; }
-}
-@keyframes surface-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
+
 
 .assistant-prompt {
   width: min(640px, 100vw);

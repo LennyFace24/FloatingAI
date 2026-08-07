@@ -34,8 +34,6 @@ function settingsFormFromPublic(settings: AppSettings): SettingsFormInput {
 
 export default function App() {
   const [surface, setSurface] = useState<MainSurface>('floating');
-  // 设置页→输入条交叉淡化：设置页保持挂载淡出、输入条叠加淡入，动画后卸载
-  const [leavingSettings, setLeavingSettings] = useState(false);
   const [settingsForm, setSettingsForm] = useState<SettingsFormInput>(defaultSettingsForm);
   const settingsFormRef = useRef(settingsForm);
   settingsFormRef.current = settingsForm;
@@ -83,10 +81,6 @@ export default function App() {
   useEffect(() => {
     const unlisten = Promise.all([
       events.onSurfaceChanged((next) => {
-        if (next === 'chat' && surfaceRef.current === 'settings') {
-          setLeavingSettings(true);
-          window.setTimeout(() => setLeavingSettings(false), 380);
-        }
         surfaceRef.current = next;
         setSurface(next);
       }),
@@ -120,66 +114,67 @@ export default function App() {
     await showAssistantPhase(assistantPhase);
   }
 
-  if (surface === 'settings') {
-    return (
-      <Suspense fallback={<div className="settings-loading" role="status">加载设置…</div>}>
-        <SettingsPanel
-          initialSettings={settingsForm}
-          onSave={async (settings) => {
-            await commands.saveSettings(settings);
-            await returnToAssistant();
-          }}
-          onClose={returnToAssistant}
-        />
-      </Suspense>
-    );
-  }
-
-  if (surface === 'chat') {
-    return (
-      <>
-        {leavingSettings ? (
-          // 交叉淡化：设置页淡出层（不交互，pointer-events 关）
-          <div className="settings-fade-out" aria-hidden="true">
-            <SettingsPanel
-              initialSettings={settingsFormRef.current}
-              onSave={async () => {}}
-              onClose={() => {}}
-            />
-          </div>
-        ) : null}
-        <div className={leavingSettings ? 'prompt-fade-in' : undefined}>
-          <AssistantPanel
-            conversation={conversation}
-            onSend={sendMessage}
-            onStop={stopMessage}
-            onClear={() => {
-              clear();
-              void syncNativePhase('prompt');
-            }}
-            onCollapse={() => {
-              void commands.showFloatingBall(prefersReducedMotion())
-                .then(() => setSurface('floating'))
-                .catch((error) => console.error('收起对话面板失败', error));
-            }}
-            onOpenSettings={() => {
-              void openSettings().catch((error) => console.error('打开设置失败', error));
-            }}
-            onContentHeight={(height) => {
-              void commands.resizeResponsePanel(height, prefersReducedMotion());
-            }}
-          />
-        </div>
-      </>
-    );
-  }
-
+  // 三 surface 常驻 DOM 叠放，fade（opacity 过渡）切换：
+  // 旧页面淡入背景、新页面淡出背景；页面不卸载——无重新渲染，
+  // 也根治「切回聊天渲染一半」问题。
   return (
-    <FloatingBall
-      isBusy={conversation.status === 'streaming'}
-      onActivate={() => {
-        void showAssistantPhase(assistantPhase).catch((error) => console.error('打开助手表面失败', error));
-      }}
-    />
+    <>
+      <div
+        className={`surface-layer ${surface !== 'floating' ? 'surface-hidden' : ''}`}
+        data-surface="floating"
+        aria-hidden={surface !== 'floating'}
+      >
+        <FloatingBall
+          isBusy={conversation.status === 'streaming'}
+          onActivate={() => {
+            void showAssistantPhase(assistantPhase).catch((error) => console.error('打开助手表面失败', error));
+          }}
+        />
+      </div>
+
+      <div
+        className={`surface-layer ${surface !== 'settings' ? 'surface-hidden' : ''}`}
+        data-surface="settings"
+        aria-hidden={surface !== 'settings'}
+      >
+        <Suspense fallback={<div className="settings-loading" role="status">加载设置…</div>}>
+          <SettingsPanel
+            initialSettings={settingsForm}
+            onSave={async (settings) => {
+              await commands.saveSettings(settings);
+              await returnToAssistant();
+            }}
+            onClose={returnToAssistant}
+          />
+        </Suspense>
+      </div>
+
+      <div
+        className={`surface-layer ${surface !== 'chat' ? 'surface-hidden' : ''}`}
+        data-surface="chat"
+        aria-hidden={surface !== 'chat'}
+      >
+        <AssistantPanel
+          conversation={conversation}
+          onSend={sendMessage}
+          onStop={stopMessage}
+          onClear={() => {
+            clear();
+            void syncNativePhase('prompt');
+          }}
+          onCollapse={() => {
+            void commands.showFloatingBall(prefersReducedMotion())
+              .then(() => setSurface('floating'))
+              .catch((error) => console.error('收起对话面板失败', error));
+          }}
+          onOpenSettings={() => {
+            void openSettings().catch((error) => console.error('打开设置失败', error));
+          }}
+          onContentHeight={(height) => {
+            void commands.resizeResponsePanel(height, prefersReducedMotion());
+          }}
+        />
+      </div>
+    </>
   );
 }
