@@ -24,8 +24,7 @@
   inset: 0;
   opacity: 1;
   visibility: visible;
-  transition: opacity 0.38s ease, visibility 0.38s;
-  z-index: 1;
+  transition: opacity 0.6s ease, visibility 0.6s;
 }
 .surface-hidden {
   opacity: 0;
@@ -126,9 +125,8 @@ button { color: inherit; }
   width: 22px;
   height: 22px;
   border: 2px solid #3d3d3d;
-  border-top-color: #b8b8b8;
   border-radius: 50%;
-  animation: waiting-spin 800ms linear infinite;
+  /* 取消加载转圈动画：发送后保持静态指示，停止按钮仍可点 */
 }
 
 .assistant-response { display: grid; grid-template-rows: 48px minmax(0, 1fr) auto; overflow: hidden; }
